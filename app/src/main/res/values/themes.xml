@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.Kitsune" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#8B3A2E</item>
+        <item name="colorPrimaryVariant">#6E2B21</item>
+        <item name="colorOnPrimary">#FFF8F1</item>
+        <item name="colorSecondary">#3A5A40</item>
+        <item name="colorSecondaryVariant">#2E4732</item>
+        <item name="colorOnSecondary">#FFF8F1</item>
+        <item name="android:statusBarColor">#8B3A2E</item>
+    </style>
+</resources>
