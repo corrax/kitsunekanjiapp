@@ -2,6 +2,7 @@ package com.kitsune.kanji.japanese.flashcards.domain.model
 
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 
 data class HomeSnapshot(
     val trackId: String,
@@ -12,7 +13,10 @@ data class HomeSnapshot(
     val shouldShowDailyReminder: Boolean,
     val rankSummary: UserRankSummary,
     val powerUps: List<PowerUpInventory>,
-    val packs: List<PackProgress>
+    val packs: List<PackProgress>,
+    val lifetimeScore: Int,
+    val lifetimeCardsReviewed: Int,
+    val recentRuns: List<DeckRunHistoryItem>
 )
 
 data class UserRankSummary(
@@ -43,11 +47,14 @@ data class PowerUpInventory(
 data class DeckCard(
     val cardId: String,
     val position: Int,
+    val type: CardType,
     val prompt: String,
     val canonicalAnswer: String,
     val acceptedAnswers: List<String>,
     val reading: String?,
     val meaning: String?,
+    val promptFurigana: String?,
+    val choices: List<String>,
     val difficulty: Int,
     val templateId: String,
     val resultScore: Int?,
@@ -100,4 +107,39 @@ data class DeckResult(
     val grade: String,
     val passedThreshold: Boolean,
     val unlockedPackId: String?
+)
+
+data class DeckRunHistoryItem(
+    val deckRunId: String,
+    val deckType: DeckType,
+    val sourceId: String,
+    val submittedAtEpochMillis: Long,
+    val totalScore: Int,
+    val grade: String,
+    val cardsReviewed: Int,
+    val totalCards: Int
+)
+
+data class DeckRunReport(
+    val deckRunId: String,
+    val deckType: DeckType,
+    val sourceId: String,
+    val startedAtEpochMillis: Long,
+    val submittedAtEpochMillis: Long?,
+    val totalScore: Int,
+    val grade: String,
+    val cardsReviewed: Int,
+    val totalCards: Int,
+    val cards: List<DeckRunCardReport>
+)
+
+data class DeckRunCardReport(
+    val cardId: String,
+    val position: Int,
+    val prompt: String,
+    val canonicalAnswer: String,
+    val userAnswer: String?,
+    val score: Int?,
+    val effectiveScore: Int?,
+    val comment: String?
 )

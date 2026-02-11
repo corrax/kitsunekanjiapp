@@ -165,7 +165,10 @@ class BillingManager(
                 )
             }
 
-            _uiState.value = _uiState.value.copy(products = mapped, message = null)
+            _uiState.value = _uiState.value.copy(
+                products = mapped.sortedBy { planSortKey(it.productId) },
+                message = null
+            )
         }
     }
 
@@ -267,12 +270,23 @@ class BillingManager(
     }
 
     companion object {
+        const val PRODUCT_PLUS_WEEKLY = "kitsune_plus_weekly"
         const val PRODUCT_PLUS_MONTHLY = "kitsune_plus_monthly"
         const val PRODUCT_PLUS_ANNUAL = "kitsune_plus_annual"
 
         val PLAN_PRODUCT_IDS = listOf(
+            PRODUCT_PLUS_WEEKLY,
             PRODUCT_PLUS_MONTHLY,
             PRODUCT_PLUS_ANNUAL
         )
+    }
+
+    private fun planSortKey(productId: String): Int {
+        return when {
+            productId.contains("weekly", ignoreCase = true) -> 0
+            productId.contains("monthly", ignoreCase = true) -> 1
+            productId.contains("annual", ignoreCase = true) -> 2
+            else -> 9
+        }
     }
 }

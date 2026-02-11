@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunCardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
@@ -74,22 +75,46 @@ interface KitsuneDao {
         SELECT c.* FROM cards c
         INNER JOIN pack_cards pc ON c.cardId = pc.cardId
         INNER JOIN user_pack_progress upp ON upp.packId = pc.packId
+        INNER JOIN packs p ON p.packId = upp.packId
         WHERE upp.status IN ('UNLOCKED', 'PASSED')
+          AND p.trackId = :trackId
         ORDER BY pc.position
         """
     )
-    suspend fun getUnlockedCards(): List<CardEntity>
+    suspend fun getUnlockedCardsForTrack(trackId: String): List<CardEntity>
 
-    @Query("SELECT cardId FROM srs_state WHERE dueDateIso <= :todayIso ORDER BY dueDateIso LIMIT :limit")
-    suspend fun getDueCardIds(todayIso: String, limit: Int): List<String>
+    @Query(
+        """
+        SELECT s.cardId
+        FROM srs_state s
+        INNER JOIN pack_cards pc ON pc.cardId = s.cardId
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE s.dueDateIso <= :todayIso
+          AND p.trackId = :trackId
+        ORDER BY s.dueDateIso
+        LIMIT :limit
+        """
+    )
+    suspend fun getDueCardIdsForTrack(todayIso: String, trackId: String, limit: Int): List<String>
 
-    @Query("SELECT COUNT(*) FROM srs_state WHERE dueDateIso <= :todayIso")
-    suspend fun getDueCardCount(todayIso: String): Int
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM srs_state s
+        INNER JOIN pack_cards pc ON pc.cardId = s.cardId
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE s.dueDateIso <= :todayIso
+          AND p.trackId = :trackId
+        """
+    )
+    suspend fun getDueCardCountForTrack(todayIso: String, trackId: String): Int
 
     @Query(
         """
         SELECT ca.cardId
         FROM card_attempts ca
+        INNER JOIN pack_cards pc2 ON pc2.cardId = ca.cardId
+        INNER JOIN packs p2 ON p2.packId = pc2.packId
         INNER JOIN (
             SELECT cardId, MAX(createdAtEpochMillis) AS latestAttempt
             FROM card_attempts
@@ -98,17 +123,26 @@ interface KitsuneDao {
             ON latest.cardId = ca.cardId
            AND latest.latestAttempt = ca.createdAtEpochMillis
         WHERE ca.scoreTotal < :retryBelowScore
+          AND p2.trackId = :trackId
         ORDER BY ca.createdAtEpochMillis DESC
         LIMIT :limit
         """
     )
-    suspend fun getRetryCardIds(retryBelowScore: Int, limit: Int): List<String>
+    suspend fun getRetryCardIdsForTrack(trackId: String, retryBelowScore: Int, limit: Int): List<String>
 
     @Query("SELECT * FROM cards WHERE cardId IN (:cardIds)")
     suspend fun getCardsByIds(cardIds: List<String>): List<CardEntity>
 
-    @Query("SELECT DISTINCT cardId FROM card_attempts")
-    suspend fun getAttemptedCardIds(): List<String>
+    @Query(
+        """
+        SELECT DISTINCT ca.cardId
+        FROM card_attempts ca
+        INNER JOIN pack_cards pc ON pc.cardId = ca.cardId
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE p.trackId = :trackId
+        """
+    )
+    suspend fun getAttemptedCardIdsForTrack(trackId: String): List<String>
 
     @Query(
         """
@@ -193,11 +227,14 @@ interface KitsuneDao {
                drc.position AS position,
                drc.resultScore AS resultScore,
                drc.isRetryQueued AS isRetryQueued,
+               c.type AS type,
                c.prompt AS prompt,
                c.canonicalAnswer AS canonicalAnswer,
                c.acceptedAnswersRaw AS acceptedAnswersRaw,
                c.reading AS reading,
                c.meaning AS meaning,
+               c.promptFurigana AS promptFurigana,
+               c.choicesRaw AS choicesRaw,
                c.difficulty AS difficulty,
                c.templateId AS templateId
         FROM deck_run_cards drc
@@ -211,8 +248,66 @@ interface KitsuneDao {
     @Query("UPDATE deck_run_cards SET resultScore = :resultScore WHERE deckRunId = :deckRunId AND cardId = :cardId")
     suspend fun updateDeckCardScore(deckRunId: String, cardId: String, resultScore: Int)
 
+    @Query("UPDATE deck_run_cards SET position = :position WHERE deckRunId = :deckRunId AND cardId = :cardId")
+    suspend fun updateDeckCardPosition(deckRunId: String, cardId: String, position: Int)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAttempt(item: CardAttemptEntity)
+
+    @Query(
+        """
+        SELECT COALESCE(SUM(scoreTotal), 0) AS lifetimeScore,
+               COUNT(*) AS reviewedCards
+        FROM card_attempts
+        """
+    )
+    suspend fun getScoreAccomplishmentSummary(): ScoreAccomplishmentRow
+
+    @Query(
+        """
+        SELECT dr.deckRunId AS deckRunId,
+               dr.deckType AS deckType,
+               dr.sourceId AS sourceId,
+               dr.submittedAtEpochMillis AS submittedAtEpochMillis,
+               COALESCE(dr.totalScore, 0) AS totalScore,
+               COUNT(drc.cardId) AS totalCards,
+               SUM(CASE WHEN drc.resultScore IS NOT NULL THEN 1 ELSE 0 END) AS cardsReviewed
+        FROM deck_runs dr
+        INNER JOIN deck_run_cards drc ON drc.deckRunId = dr.deckRunId
+        WHERE dr.submittedAtEpochMillis IS NOT NULL
+        GROUP BY dr.deckRunId
+        ORDER BY dr.submittedAtEpochMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getRecentDeckRunHistory(limit: Int): List<DeckRunHistoryRow>
+
+    @Query(
+        """
+        SELECT drc.cardId AS cardId,
+               drc.position AS position,
+               c.prompt AS prompt,
+               c.canonicalAnswer AS canonicalAnswer,
+               drc.resultScore AS resultScore,
+               ca.scoreEffective AS effectiveScore,
+               ca.matchedAnswer AS matchedAnswer,
+               ca.feedback AS feedback
+        FROM deck_run_cards drc
+        INNER JOIN cards c ON c.cardId = drc.cardId
+        LEFT JOIN card_attempts ca
+            ON ca.deckRunId = drc.deckRunId
+            AND ca.cardId = drc.cardId
+            AND ca.createdAtEpochMillis = (
+                SELECT MAX(ca2.createdAtEpochMillis)
+                FROM card_attempts ca2
+                WHERE ca2.deckRunId = drc.deckRunId
+                  AND ca2.cardId = drc.cardId
+            )
+        WHERE drc.deckRunId = :deckRunId
+        ORDER BY drc.position
+        """
+    )
+    suspend fun getDeckRunReportCards(deckRunId: String): List<DeckRunReportCardRow>
 
     @Query("SELECT * FROM srs_state WHERE cardId = :cardId")
     suspend fun getSrsState(cardId: String): SrsStateEntity?
@@ -244,11 +339,14 @@ data class DeckCardRow(
     val position: Int,
     val resultScore: Int?,
     val isRetryQueued: Boolean,
+    val type: CardType,
     val prompt: String,
     val canonicalAnswer: String,
     val acceptedAnswersRaw: String,
     val reading: String?,
     val meaning: String?,
+    val promptFurigana: String?,
+    val choicesRaw: String?,
     val difficulty: Int,
     val templateId: String
 )
@@ -256,4 +354,30 @@ data class DeckCardRow(
 data class DifficultyScoreSnapshotRow(
     val easyAverage: Double?,
     val hardAverage: Double?
+)
+
+data class ScoreAccomplishmentRow(
+    val lifetimeScore: Int,
+    val reviewedCards: Int
+)
+
+data class DeckRunHistoryRow(
+    val deckRunId: String,
+    val deckType: DeckType,
+    val sourceId: String,
+    val submittedAtEpochMillis: Long,
+    val totalScore: Int,
+    val cardsReviewed: Int,
+    val totalCards: Int
+)
+
+data class DeckRunReportCardRow(
+    val cardId: String,
+    val position: Int,
+    val prompt: String,
+    val canonicalAnswer: String,
+    val resultScore: Int?,
+    val effectiveScore: Int?,
+    val matchedAnswer: String?,
+    val feedback: String?
 )

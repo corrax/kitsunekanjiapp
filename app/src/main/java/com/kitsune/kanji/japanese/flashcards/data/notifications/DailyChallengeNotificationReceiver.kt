@@ -36,7 +36,9 @@ class DailyChallengeNotificationReceiver : BroadcastReceiver() {
                     try {
                         val app = context.applicationContext as KitsuneApp
                         app.appContainer.repository.initialize()
-                        val snapshot = app.appContainer.repository.getHomeSnapshot()
+                        val selectedTrackId = app.appContainer.deckSelectionPreferences
+                            .getSelectedTrackId(defaultTrackId = "jlpt_n5_core")
+                        val snapshot = app.appContainer.repository.getHomeSnapshot(trackId = selectedTrackId)
                         if (snapshot.shouldShowDailyReminder) {
                             maybeNotify(context, intent.action ?: "")
                         }

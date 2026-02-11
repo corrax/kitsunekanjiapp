@@ -4,7 +4,12 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 enum class CardType {
-    KANJI
+    KANJI_WRITE,
+    VOCAB_READING,
+    GRAMMAR_CHOICE,
+    GRAMMAR_CLOZE_WRITE,
+    SENTENCE_COMPREHENSION,
+    SENTENCE_BUILD
 }
 
 enum class PackProgressStatus {
@@ -49,6 +54,8 @@ data class CardEntity(
     val acceptedAnswersRaw: String,
     val reading: String?,
     val meaning: String?,
+    val promptFurigana: String?,
+    val choicesRaw: String?,
     val difficulty: Int,
     val templateId: String
 )
@@ -111,6 +118,9 @@ data class CardAttemptEntity(
     val scoreKnowledge: Int,
     val assistCount: Int,
     val assistsRaw: String,
+    val matchedAnswer: String,
+    val canonicalAnswer: String,
+    val isCanonicalMatch: Boolean,
     val feedback: String
 )
 

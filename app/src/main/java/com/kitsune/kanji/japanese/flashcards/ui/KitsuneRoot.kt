@@ -24,7 +24,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.kitsune.kanji.japanese.flashcards.AppContainer
 import com.kitsune.kanji.japanese.flashcards.KitsuneApp
+import com.kitsune.kanji.japanese.flashcards.data.local.EducationalGoal
 import com.kitsune.kanji.japanese.flashcards.data.notifications.DailyChallengeNotificationScheduler
 import com.kitsune.kanji.japanese.flashcards.ui.billing.PaywallScreen
 import com.kitsune.kanji.japanese.flashcards.ui.deck.DeckScreen
@@ -33,8 +35,11 @@ import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.DeckBrowserScreen
 import com.kitsune.kanji.japanese.flashcards.ui.home.HomeScreen
 import com.kitsune.kanji.japanese.flashcards.ui.home.HomeViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingScreen
+import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingSelection
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
 import com.kitsune.kanji.japanese.flashcards.ui.profile.ProfileScreen
+import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportScreen
+import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.settings.SettingsScreen
 import com.kitsune.kanji.japanese.flashcards.ui.settings.SettingsViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.theme.KitsuneTheme
@@ -47,6 +52,7 @@ private const val routeSettings = "settings"
 private const val routeProfile = "profile"
 private const val routeHome = "home"
 private const val routeDeck = "deck"
+private const val routeDeckReport = "deck_report"
 
 @Composable
 fun KitsuneRoot() {
@@ -81,9 +87,9 @@ fun KitsuneRoot() {
         ) {
             composable(routeOnboarding) {
                 OnboardingScreen(
-                    onCompleteFree = { level ->
+                    onCompleteFree = { selection ->
                         scope.launch {
-                            appContainer.onboardingPreferences.setLearnerLevel(level)
+                            persistOnboardingSelection(appContainer, selection)
                             appContainer.onboardingPreferences.setOnboardingCompleted()
                             navController.navigate(routeHome) {
                                 popUpTo(routeOnboarding) { inclusive = true }
@@ -91,15 +97,15 @@ fun KitsuneRoot() {
                             }
                         }
                     },
-                    onStartTrial = { level ->
+                    onStartTrial = { selection ->
                         scope.launch {
-                            appContainer.onboardingPreferences.setLearnerLevel(level)
+                            persistOnboardingSelection(appContainer, selection)
                             navController.navigate("$routePaywall?trial=true")
                         }
                     },
-                    onChoosePlan = { level ->
+                    onChoosePlan = { selection ->
                         scope.launch {
-                            appContainer.onboardingPreferences.setLearnerLevel(level)
+                            persistOnboardingSelection(appContainer, selection)
                             navController.navigate("$routePaywall?trial=false")
                         }
                     }
@@ -196,8 +202,8 @@ fun KitsuneRoot() {
                 DeckBrowserScreen(
                     selectedThemeId = homeState.selectedDeckThemeId,
                     onBack = { navController.popBackStack() },
-                    onSelectTheme = { themeId ->
-                        homeViewModel.selectDeckTheme(themeId)
+                    onSelectTheme = { themeId, trackId ->
+                        homeViewModel.selectDeck(themeId = themeId, trackId = trackId)
                         navController.popBackStack()
                     }
                 )
@@ -240,8 +246,14 @@ fun KitsuneRoot() {
                 val homeState = homeViewModel.uiState.collectAsStateWithLifecycle().value
                 ProfileScreen(
                     rankSummary = homeState.rankSummary,
+                    lifetimeScore = homeState.lifetimeScore,
+                    lifetimeCardsReviewed = homeState.lifetimeCardsReviewed,
+                    recentRuns = homeState.recentRuns,
                     onBack = { navController.popBackStack() },
-                    onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
+                    onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") },
+                    onOpenRunReport = { runId ->
+                        navController.navigate("$routeDeckReport/$runId")
+                    }
                 )
             }
 
@@ -265,12 +277,78 @@ fun KitsuneRoot() {
                     onBack = { navController.popBackStack() },
                     onPrevious = viewModel::goPrevious,
                     onNext = viewModel::goNext,
-                    onSubmitCard = { sample, assists ->
-                        viewModel.submitCurrentCard(sample = sample, requestedAssists = assists)
+                    onSubmitCard = { sample, typedAnswer, selectedChoice, assists ->
+                        viewModel.submitCurrentCard(
+                            sample = sample,
+                            typedAnswer = typedAnswer,
+                            selectedChoice = selectedChoice,
+                            requestedAssists = assists
+                        )
+                    },
+                    onUsePowerUp = viewModel::usePowerUp,
+                    onDeckSubmitted = { runId ->
+                        navController.navigate("$routeDeckReport/$runId")
                     },
                     onSubmitDeck = viewModel::submitDeck
                 )
             }
+
+            composable(
+                route = "$routeDeckReport/{deckRunId}",
+                arguments = listOf(navArgument("deckRunId") { type = NavType.StringType })
+            ) {
+                val deckRunId = checkNotNull(it.arguments?.getString("deckRunId"))
+                val viewModel: DeckReportViewModel = viewModel(
+                    factory = DeckReportViewModel.factory(
+                        repository = appContainer.repository
+                    )
+                )
+                LaunchedEffect(deckRunId) {
+                    viewModel.initialize(deckRunId)
+                }
+                val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                DeckReportScreen(
+                    state = state,
+                    onBack = { navController.popBackStack() },
+                    onBackToHome = {
+                        navController.navigate(routeHome) {
+                            popUpTo(routeHome) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
         }
+    }
+}
+
+private suspend fun persistOnboardingSelection(
+    appContainer: AppContainer,
+    selection: OnboardingSelection
+) {
+    appContainer.onboardingPreferences.setLearnerLevel(selection.learnerLevel)
+    appContainer.onboardingPreferences.setEducationalGoal(selection.educationalGoal)
+    val (themeId, trackId) = preferredDeckForSelection(selection)
+    appContainer.deckSelectionPreferences.setSelectedThemeId(themeId)
+    appContainer.deckSelectionPreferences.setSelectedTrackId(trackId)
+}
+
+private fun preferredDeckForSelection(selection: OnboardingSelection): Pair<String, String> {
+    return when (selection.educationalGoal) {
+        EducationalGoal.CASUAL,
+        EducationalGoal.EVERYDAY_USE -> "conversation" to "conversation"
+
+        EducationalGoal.SCHOOL_OR_WORK -> {
+            when (selection.learnerLevel) {
+                LearnerLevel.INTERMEDIATE_N3,
+                LearnerLevel.ADVANCED_N2 -> "work" to "work"
+
+                LearnerLevel.BEGINNER_N5,
+                LearnerLevel.BEGINNER_PLUS_N4,
+                LearnerLevel.UNSURE -> "school" to "school"
+            }
+        }
+
+        EducationalGoal.JLPT_OR_CLASSES -> "jlpt_n5" to "jlpt_n5_core"
     }
 }

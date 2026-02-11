@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 fun DeckBrowserScreen(
     selectedThemeId: String?,
     onBack: () -> Unit,
-    onSelectTheme: (String) -> Unit
+    onSelectTheme: (String, String?) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -68,7 +68,7 @@ fun DeckBrowserScreen(
             DeckThemeCard(
                 option = theme,
                 isSelected = selectedThemeId == theme.id,
-                onSelect = { onSelectTheme(theme.id) }
+                onSelect = { onSelectTheme(theme.id, theme.contentTrackId) }
             )
         }
     }
@@ -141,7 +141,7 @@ private fun DeckThemeCard(
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = option.difficulty,
+                        text = if (option.contentTrackId == null) "${option.difficulty} · Preview" else option.difficulty,
                         color = Color(0xFFFFE2C7),
                         style = MaterialTheme.typography.labelSmall
                     )

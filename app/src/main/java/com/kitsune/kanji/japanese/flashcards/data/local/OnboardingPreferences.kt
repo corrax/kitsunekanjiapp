@@ -18,6 +18,13 @@ enum class LearnerLevel {
     UNSURE
 }
 
+enum class EducationalGoal {
+    CASUAL,
+    EVERYDAY_USE,
+    SCHOOL_OR_WORK,
+    JLPT_OR_CLASSES
+}
+
 class OnboardingPreferences(private val context: Context) {
     suspend fun shouldShowOnboarding(): Boolean {
         return context.userPrefsDataStore.data
@@ -46,6 +53,21 @@ class OnboardingPreferences(private val context: Context) {
         } ?: LearnerLevel.BEGINNER_N5
     }
 
+    suspend fun setEducationalGoal(goal: EducationalGoal) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[KEY_EDUCATIONAL_GOAL] = goal.name
+        }
+    }
+
+    suspend fun getEducationalGoal(): EducationalGoal {
+        val raw = context.userPrefsDataStore.data.map { prefs ->
+            prefs[KEY_EDUCATIONAL_GOAL]
+        }.first()
+        return raw?.let {
+            runCatching { EducationalGoal.valueOf(it) }.getOrNull()
+        } ?: EducationalGoal.JLPT_OR_CLASSES
+    }
+
     suspend fun isPlacementApplied(): Boolean {
         return context.userPrefsDataStore.data
             .map { prefs -> prefs[KEY_PLACEMENT_APPLIED] ?: false }
@@ -61,6 +83,7 @@ class OnboardingPreferences(private val context: Context) {
     companion object {
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_LEARNER_LEVEL = stringPreferencesKey("learner_level")
+        private val KEY_EDUCATIONAL_GOAL = stringPreferencesKey("educational_goal")
         private val KEY_PLACEMENT_APPLIED = booleanPreferencesKey("placement_applied")
     }
 }

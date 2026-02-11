@@ -20,7 +20,19 @@ class DeckSelectionPreferences(private val context: Context) {
         }
     }
 
+    suspend fun getSelectedTrackId(defaultTrackId: String): String {
+        val prefs = context.deckSelectionDataStore.data.first()
+        return prefs[KEY_SELECTED_TRACK_ID] ?: defaultTrackId
+    }
+
+    suspend fun setSelectedTrackId(trackId: String) {
+        context.deckSelectionDataStore.edit { prefs ->
+            prefs[KEY_SELECTED_TRACK_ID] = trackId
+        }
+    }
+
     companion object {
         private val KEY_SELECTED_THEME_ID = stringPreferencesKey("selected_deck_theme_id")
+        private val KEY_SELECTED_TRACK_ID = stringPreferencesKey("selected_deck_track_id")
     }
 }

@@ -1,5 +1,17 @@
 package com.kitsune.kanji.japanese.flashcards.ui.deck
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -8,8 +20,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,14 +40,17 @@ import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -64,13 +83,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.statusBarsPadding
 import com.kitsune.kanji.japanese.flashcards.R
+import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkPoint
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkSample
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkStroke
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlinx.coroutines.delay
 
 @Composable
 fun DeckScreen(
@@ -78,22 +102,90 @@ fun DeckScreen(
     onBack: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
-    onSubmitCard: (InkSample, List<String>) -> Unit,
+    onSubmitCard: (InkSample, String?, String?, List<String>) -> Unit,
+    onUsePowerUp: (String) -> Unit,
+    onDeckSubmitted: (String) -> Unit,
     onSubmitDeck: () -> Unit
 ) {
     val currentCard = state.currentCard
     var currentSample by remember(currentCard?.cardId) { mutableStateOf(InkSample(emptyList())) }
+    var typedAnswer by remember(currentCard?.cardId) { mutableStateOf("") }
+    var selectedChoice by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
     var canvasResetCounter by remember(currentCard?.cardId) { mutableIntStateOf(0) }
     var selectedAssistId by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
     var showGestureOverlay by rememberSaveable(state.deckRunId) { mutableStateOf(true) }
     var cardDragX by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var cardDragY by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
+    var scoreBurst by remember(state.deckRunId) { mutableStateOf<ScoreBurstData?>(null) }
+    val scoredCards = state.session?.cards?.mapNotNull { it.resultScore }.orEmpty()
+    val reviewedCount = scoredCards.size
+    val totalCards = state.session?.cards?.size ?: 0
+    val runScoreTotal = scoredCards.sum()
+    val runAverageScore = scoredCards.takeIf { it.isNotEmpty() }?.average()?.roundToInt() ?: 0
+    val isChoiceCard = currentCard?.choices?.isNotEmpty() == true &&
+        currentCard.type in setOf(
+            CardType.VOCAB_READING,
+            CardType.GRAMMAR_CHOICE,
+            CardType.SENTENCE_COMPREHENSION
+        )
+    val usesHandwritingPad = currentCard?.type == CardType.KANJI_WRITE
+    val canSubmit = when {
+        usesHandwritingPad -> currentSample.strokes.isNotEmpty()
+        isChoiceCard -> !selectedChoice.isNullOrBlank()
+        else -> typedAnswer.isNotBlank()
+    }
+    val visibleChoices = remember(currentCard?.cardId, selectedAssistId) {
+        val card = currentCard ?: return@remember emptyList()
+        val choices = card.choices
+        if (
+            selectedAssistId == PowerUpPreferences.POWER_UP_INSIGHT_LENS &&
+            choices.size >= 3 &&
+            card.canonicalAnswer in choices
+        ) {
+            val distractor = choices.firstOrNull { it != card.canonicalAnswer }
+            listOfNotNull(card.canonicalAnswer, distractor)
+        } else {
+            choices
+        }
+    }
+    LaunchedEffect(visibleChoices, selectedChoice) {
+        if (selectedChoice != null && selectedChoice !in visibleChoices) {
+            selectedChoice = null
+        }
+    }
+    LaunchedEffect(state.latestSubmissionToken) {
+        if (state.latestSubmissionToken == 0L) return@LaunchedEffect
+        val latestScore = state.latestScore ?: return@LaunchedEffect
+        val effective = state.latestEffectiveScore ?: latestScore
+        val burst = ScoreBurstData(
+            token = state.latestSubmissionToken,
+            score = latestScore,
+            effectiveScore = effective
+        )
+        scoreBurst = burst
+        delay(1300)
+        if (scoreBurst?.token == burst.token) {
+            scoreBurst = null
+        }
+    }
+    LaunchedEffect(state.deckResult?.deckRunId) {
+        state.deckResult?.deckRunId?.let { runId ->
+            onDeckSubmitted(runId)
+        }
+    }
 
     fun submitCurrentCard() {
-        if (currentSample.strokes.isEmpty()) return
-        onSubmitCard(currentSample, listOfNotNull(selectedAssistId))
+        if (!canSubmit) return
+        onSubmitCard(
+            currentSample,
+            typedAnswer.takeIf { it.isNotBlank() },
+            selectedChoice,
+            listOfNotNull(selectedAssistId)
+        )
         canvasResetCounter += 1
         currentSample = InkSample(emptyList())
+        typedAnswer = ""
+        selectedChoice = null
         selectedAssistId = null
     }
 
@@ -153,6 +245,41 @@ fun DeckScreen(
                 )
                 TextButton(onClick = onSubmitDeck) { Text("Submit Deck") }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xF2FFFFFF))
+                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        text = "Run score: $runScoreTotal",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF432B1E)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xF2FFFFFF))
+                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                ) {
+                    Text(
+                        text = "Reviewed: $reviewedCount/$totalCards (avg $runAverageScore)",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF432B1E)
+                    )
+                }
+            }
 
             CardStackFrame(
                 dragX = cardDragX,
@@ -173,6 +300,16 @@ fun DeckScreen(
                 onDragCancel = {
                     cardDragX = 0f
                     cardDragY = 0f
+                },
+                overlay = {
+                    scoreBurst?.let { burst ->
+                        ScoreBurstOverlay(
+                            burst = burst,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(horizontal = 18.dp, vertical = 24.dp)
+                        )
+                    }
                 }
             ) {
                 Column(
@@ -200,19 +337,36 @@ fun DeckScreen(
                             color = MaterialTheme.colorScheme.secondary
                         )
                         Text(
-                            text = "English prompt",
+                            text = promptLabelFor(currentCard.type),
                             style = MaterialTheme.typography.titleMedium
                         )
+                        val furiganaPrompt = currentCard.promptFurigana
+                            ?.takeIf { shouldShowFurigana(cardDifficulty = currentCard.difficulty) }
+                        if (furiganaPrompt != null) {
+                            FuriganaText(
+                                text = furiganaPrompt,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(
+                                text = currentCard.prompt,
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         Text(
-                            text = currentCard.prompt,
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Write the matching kanji from memory.",
+                            text = instructionFor(currentCard.type),
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF6A5A48)
                         )
+                        if (selectedAssistId == PowerUpPreferences.POWER_UP_HINT_BRUSH) {
+                            Text(
+                                text = hintTextFor(currentCard),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color(0xFF7A4F34),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                         if (currentCard.isRetryQueued) {
                             Text(
                                 text = "Recycled practice card",
@@ -223,13 +377,32 @@ fun DeckScreen(
                         }
                     }
 
-                    InkPad(
-                        resetCounter = canvasResetCounter,
-                        onSampleChanged = { sample -> currentSample = sample },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                    )
+                    if (usesHandwritingPad) {
+                        InkPad(
+                            resetCounter = canvasResetCounter,
+                            onSampleChanged = { sample -> currentSample = sample },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        )
+                    } else if (isChoiceCard) {
+                        ChoiceAnswerPanel(
+                            choices = visibleChoices,
+                            selectedChoice = selectedChoice,
+                            onChoiceSelected = { selectedChoice = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = typedAnswer,
+                            onValueChange = { typedAnswer = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            label = { Text("Type your answer") }
+                        )
+                    }
                 }
             }
 
@@ -242,11 +415,14 @@ fun DeckScreen(
                     powerUps = state.powerUps,
                     selectedPowerUpId = selectedAssistId,
                     onSelectedPowerUpChanged = { selectedAssistId = it },
+                    onUseInstantPowerUp = { powerUpId ->
+                        onUsePowerUp(powerUpId)
+                    },
                     modifier = Modifier.weight(1f)
                 )
                 Button(
                     onClick = { submitCurrentCard() },
-                    enabled = currentSample.strokes.isNotEmpty(),
+                    enabled = canSubmit,
                     shape = RoundedCornerShape(14.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF20A557),
@@ -264,17 +440,6 @@ fun DeckScreen(
                 }
             }
 
-            state.latestScore?.let { score ->
-                Text(
-                    text = "Latest score: $score" + (
-                        state.latestEffectiveScore?.let { effective ->
-                            if (effective != score) " (learning score $effective)" else ""
-                        } ?: ""
-                    ),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
-                )
-            }
             state.latestMatchedAnswer?.let { matched ->
                 Text(
                     text = if (state.latestIsCanonical) {
@@ -307,22 +472,6 @@ fun DeckScreen(
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            state.deckResult?.let { result ->
-                val resultLine = buildString {
-                    append("Deck submitted. Score ${result.totalScore} (${result.grade})")
-                    if (result.deckType == DeckType.EXAM) {
-                        append(if (result.passedThreshold) " - Passed" else " - Not passed")
-                    }
-                }
-                Text(text = resultLine, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                result.unlockedPackId?.let { unlocked ->
-                    Text(
-                        text = "Unlocked next pack: $unlocked",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
         }
 
         if (showGestureOverlay) {
@@ -333,6 +482,186 @@ fun DeckScreen(
     }
 }
 
+private data class ScoreBurstData(
+    val token: Long,
+    val score: Int,
+    val effectiveScore: Int
+)
+
+private enum class ScoreBurstTier {
+    MISS,
+    GOOD,
+    GREAT,
+    EXCELLENT
+}
+
+@Composable
+private fun ScoreBurstOverlay(
+    burst: ScoreBurstData,
+    modifier: Modifier = Modifier
+) {
+    val tier = remember(burst.token) { scoreBurstTierFor(burst.effectiveScore) }
+    val popScale = remember(burst.token) { Animatable(if (tier == ScoreBurstTier.MISS) 1f else 0.45f) }
+    val popAlpha = remember(burst.token) { Animatable(0f) }
+    val shakeOffset = remember(burst.token) { Animatable(0f) }
+    val tilt = remember(burst.token) { Animatable(0f) }
+
+    LaunchedEffect(burst.token) {
+        popAlpha.animateTo(1f, animationSpec = tween(durationMillis = 130))
+        when (tier) {
+            ScoreBurstTier.MISS -> {
+                repeat(4) {
+                    shakeOffset.animateTo(14f, tween(durationMillis = 38))
+                    shakeOffset.animateTo(-14f, tween(durationMillis = 38))
+                }
+                shakeOffset.animateTo(0f, tween(durationMillis = 38))
+            }
+
+            ScoreBurstTier.GOOD -> {
+                popScale.animateTo(
+                    targetValue = 1.03f,
+                    animationSpec = spring(dampingRatio = 0.66f, stiffness = 270f)
+                )
+            }
+
+            ScoreBurstTier.GREAT -> {
+                popScale.animateTo(
+                    targetValue = 1.13f,
+                    animationSpec = spring(dampingRatio = 0.56f, stiffness = 220f)
+                )
+                tilt.animateTo(-6f, tween(100))
+                tilt.animateTo(0f, tween(120))
+            }
+
+            ScoreBurstTier.EXCELLENT -> {
+                popScale.animateTo(
+                    targetValue = 1.24f,
+                    animationSpec = spring(dampingRatio = 0.48f, stiffness = 180f)
+                )
+                tilt.animateTo(-7f, tween(100))
+                tilt.animateTo(7f, tween(100))
+                tilt.animateTo(0f, tween(120))
+            }
+        }
+    }
+
+    val headline = when (tier) {
+        ScoreBurstTier.MISS -> "Reinforce"
+        ScoreBurstTier.GOOD -> "Good"
+        ScoreBurstTier.GREAT -> "Great"
+        ScoreBurstTier.EXCELLENT -> "Excellent"
+    }
+    val background = when (tier) {
+        ScoreBurstTier.MISS -> Color(0xFFE16957)
+        ScoreBurstTier.GOOD -> Color(0xFF219B5B)
+        ScoreBurstTier.GREAT -> Color(0xFF1A9A83)
+        ScoreBurstTier.EXCELLENT -> Color(0xFFF39C12)
+    }
+    val border = when (tier) {
+        ScoreBurstTier.MISS -> Color(0xFF6F221A)
+        ScoreBurstTier.GOOD -> Color(0xFF0E5831)
+        ScoreBurstTier.GREAT -> Color(0xFF0C5448)
+        ScoreBurstTier.EXCELLENT -> Color(0xFF8C4D00)
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedVisibility(
+            visible = tier == ScoreBurstTier.GREAT || tier == ScoreBurstTier.EXCELLENT,
+            enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.8f),
+            exit = fadeOut(tween(180)) + scaleOut(targetScale = 1.15f)
+        ) {
+            CelebrationGlow(
+                intense = tier == ScoreBurstTier.EXCELLENT,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier
+                .offset { IntOffset(shakeOffset.value.roundToInt(), 0) }
+                .graphicsLayer {
+                    alpha = popAlpha.value
+                    scaleX = popScale.value
+                    scaleY = popScale.value
+                    rotationZ = tilt.value
+                }
+                .clip(RoundedCornerShape(18.dp))
+                .background(background.copy(alpha = 0.95f))
+                .border(2.dp, border, RoundedCornerShape(18.dp))
+                .padding(horizontal = 22.dp, vertical = 14.dp)
+        ) {
+            Text(
+                text = headline,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = Color.White
+            )
+            Text(
+                text = "Score ${burst.score}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            if (burst.effectiveScore != burst.score) {
+                Text(
+                    text = "Learning score ${burst.effectiveScore}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFFF4E5)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CelebrationGlow(
+    intense: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "celebration-glow")
+    val pulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = if (intense) 760 else 920),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow-pulse"
+    )
+    Canvas(modifier = modifier) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val base = size.minDimension * if (intense) 0.24f else 0.2f
+        val rings = if (intense) 12 else 8
+        repeat(rings) { index ->
+            val angle = ((index * (360f / rings)) + (pulse * 38f)) * (Math.PI.toFloat() / 180f)
+            val orbit = base + (index * 8f) + (pulse * 12f)
+            val point = Offset(
+                x = center.x + (cos(angle) * orbit),
+                y = center.y + (sin(angle) * orbit)
+            )
+            drawCircle(
+                color = if (intense) Color(0xFFFFD26A) else Color(0xFFB8F3D8),
+                radius = if (intense) 5f else 4f,
+                center = point,
+                alpha = if (intense) 0.62f else 0.5f
+            )
+        }
+    }
+}
+
+private fun scoreBurstTierFor(score: Int): ScoreBurstTier {
+    return when {
+        score >= 95 -> ScoreBurstTier.EXCELLENT
+        score >= 85 -> ScoreBurstTier.GREAT
+        score >= 70 -> ScoreBurstTier.GOOD
+        else -> ScoreBurstTier.MISS
+    }
+}
+
 @Composable
 private fun CardStackFrame(
     dragX: Float,
@@ -340,6 +669,7 @@ private fun CardStackFrame(
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
     onDragCancel: () -> Unit,
+    overlay: (@Composable BoxScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val leftHintAlpha = ((-dragX - 70f) / 90f).coerceIn(0f, 0.72f)
@@ -381,14 +711,19 @@ private fun CardStackFrame(
                     )
                 }
         ) {
-            Column(
+            Box(
                 modifier = Modifier
                     .matchParentSize()
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFFFFFDF8))
                     .border(1.dp, Color(0xFFDCC5A9), RoundedCornerShape(20.dp)),
-                content = content
-            )
+            ) {
+                Column(
+                    modifier = Modifier.matchParentSize(),
+                    content = content
+                )
+                overlay?.invoke(this)
+            }
         }
         if (leftHintAlpha > 0f) {
             Box(
@@ -452,9 +787,9 @@ private fun GestureHelpOverlay(onDismiss: () -> Unit) {
             Text("Drag up to submit a written card for scoring.")
             Text("You can also tap the green Submit button in the footer.")
             Text("Power-ups:")
-            Text("- Kitsune Charm: retry support for tough cards")
-            Text("- Fude Hint: reveal a guiding stroke")
-            Text("- Radical Lens: highlight the key kanji component")
+            Text("- Lucky Coin: reroll the current card")
+            Text("- Fude Hint: reveal a starter clue")
+            Text("- Insight Lens: remove one wrong option / show context")
             Text("Using assists lowers learning score and schedules faster reinforcement.")
             Text("Accepted variants can pass, but canonical JLPT forms score higher.")
             Text("When ready, submit the full deck from the top-right action.")
@@ -465,11 +800,151 @@ private fun GestureHelpOverlay(onDismiss: () -> Unit) {
     }
 }
 
+private fun promptLabelFor(type: CardType): String {
+    return when (type) {
+        CardType.KANJI_WRITE -> "English prompt"
+        CardType.VOCAB_READING -> "Vocab check"
+        CardType.GRAMMAR_CHOICE -> "Grammar choice"
+        CardType.GRAMMAR_CLOZE_WRITE -> "Grammar cloze"
+        CardType.SENTENCE_COMPREHENSION -> "Sentence understanding"
+        CardType.SENTENCE_BUILD -> "Sentence construction"
+    }
+}
+
+private fun instructionFor(type: CardType): String {
+    return when (type) {
+        CardType.KANJI_WRITE -> "Write the matching kanji from memory."
+        CardType.VOCAB_READING -> "Pick the best answer."
+        CardType.GRAMMAR_CHOICE -> "Choose the grammar pattern that fits."
+        CardType.GRAMMAR_CLOZE_WRITE -> "Type the missing grammar form."
+        CardType.SENTENCE_COMPREHENSION -> "Select the best meaning."
+        CardType.SENTENCE_BUILD -> "Type the sentence that matches the prompt."
+    }
+}
+
+private fun hintTextFor(card: com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard): String {
+    val answer = card.canonicalAnswer
+    val starter = answer.take(1)
+    return when (card.type) {
+        CardType.KANJI_WRITE -> "Hint: reading ${card.reading ?: "--"}"
+        else -> "Hint: starts with \"$starter\""
+    }
+}
+
+private fun shouldShowFurigana(cardDifficulty: Int): Boolean {
+    return cardDifficulty <= 4
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChoiceAnswerPanel(
+    choices: List<String>,
+    selectedChoice: String?,
+    onChoiceSelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFFFFFCF6))
+            .border(2.dp, Color(0xFFB89B7A), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            choices.forEach { option ->
+                val selected = selectedChoice == option
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (selected) Color(0xFFFFDFC8) else Color(0xFFFFFFFF))
+                        .border(1.dp, Color(0xFFD6B290), RoundedCornerShape(12.dp))
+                        .clickable { onChoiceSelected(option) }
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    Text(
+                        text = option,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = Color(0xFF2D1E14)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FuriganaText(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val tokens = remember(text) { parseFuriganaTokens(text) }
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        tokens.forEach { token ->
+            when (token) {
+                is FuriganaToken.Plain -> Text(
+                    text = token.value,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                is FuriganaToken.Ruby -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = token.reading,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF7A4F34)
+                    )
+                    Text(
+                        text = token.base,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+    }
+}
+
+private sealed interface FuriganaToken {
+    data class Plain(val value: String) : FuriganaToken
+    data class Ruby(val base: String, val reading: String) : FuriganaToken
+}
+
+private fun parseFuriganaTokens(text: String): List<FuriganaToken> {
+    val regex = Regex("""([^\s{}]+)\{([^{}]+)\}""")
+    val tokens = mutableListOf<FuriganaToken>()
+    var cursor = 0
+    regex.findAll(text).forEach { match ->
+        if (cursor < match.range.first) {
+            tokens.add(FuriganaToken.Plain(text.substring(cursor, match.range.first)))
+        }
+        tokens.add(FuriganaToken.Ruby(base = match.groupValues[1], reading = match.groupValues[2]))
+        cursor = match.range.last + 1
+    }
+    if (cursor < text.length) {
+        tokens.add(FuriganaToken.Plain(text.substring(cursor)))
+    }
+    return tokens.filterNot { token ->
+        token is FuriganaToken.Plain && token.value.isBlank()
+    }
+}
+
 @Composable
 private fun PowerUpFooter(
     powerUps: List<PowerUpInventory>,
     selectedPowerUpId: String?,
     onSelectedPowerUpChanged: (String?) -> Unit,
+    onUseInstantPowerUp: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val selected = powerUps.firstOrNull { it.id == selectedPowerUpId }
@@ -496,9 +971,13 @@ private fun PowerUpFooter(
                         .border(1.dp, Color(0xFFFFC6A5), RoundedCornerShape(12.dp))
                         .clickable {
                             if (isEnabled) {
-                                onSelectedPowerUpChanged(
-                                    if (selectedPowerUpId == powerUp.id) null else powerUp.id
-                                )
+                                if (powerUp.id == PowerUpPreferences.POWER_UP_LUCKY_COIN) {
+                                    onUseInstantPowerUp(powerUp.id)
+                                } else {
+                                    onSelectedPowerUpChanged(
+                                        if (selectedPowerUpId == powerUp.id) null else powerUp.id
+                                    )
+                                }
                             }
                         }
                         .padding(horizontal = 8.dp, vertical = 10.dp)
@@ -537,9 +1016,9 @@ private fun PowerUpFooter(
 
 private fun iconForPowerUp(powerUpId: String): ImageVector {
     return when (powerUpId) {
-        "second_chance" -> Icons.Filled.Pets
-        "hint_brush" -> Icons.Filled.MenuBook
-        "reveal_radical" -> Icons.Filled.AutoFixHigh
+        PowerUpPreferences.POWER_UP_LUCKY_COIN -> Icons.Filled.Casino
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Lightbulb
+        PowerUpPreferences.POWER_UP_INSIGHT_LENS -> Icons.Filled.Visibility
         else -> Icons.Filled.AutoFixHigh
     }
 }

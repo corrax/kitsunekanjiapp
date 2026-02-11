@@ -7,6 +7,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
+import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
@@ -38,8 +39,12 @@ data class HomeUiState(
     val shouldShowDailyReminder: Boolean = false,
     val powerUps: List<PowerUpInventory> = emptyList(),
     val packs: List<PackProgress> = emptyList(),
+    val lifetimeScore: Int = 0,
+    val lifetimeCardsReviewed: Int = 0,
+    val recentRuns: List<DeckRunHistoryItem> = emptyList(),
     val selectedPackId: String? = null,
     val selectedDeckThemeId: String = deckThemeCatalog.first().id,
+    val selectedTrackId: String = "jlpt_n5_core",
     val errorMessage: String? = null
 )
 
@@ -56,7 +61,8 @@ class HomeViewModel(
     init {
         viewModelScope.launch {
             val savedTheme = deckSelectionPreferences.getSelectedThemeId(deckThemeCatalog.first().id)
-            _uiState.update { it.copy(selectedDeckThemeId = savedTheme) }
+            val savedTrackId = deckSelectionPreferences.getSelectedTrackId(defaultTrackId = "jlpt_n5_core")
+            _uiState.update { it.copy(selectedDeckThemeId = savedTheme, selectedTrackId = savedTrackId) }
             loadHome()
         }
     }
@@ -66,7 +72,7 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isStartingDeck = true, errorMessage = null, startingPackId = null) }
             runCatching {
-                repository.createOrLoadDailyDeck()
+                repository.createOrLoadDailyDeck(trackId = _uiState.value.selectedTrackId)
             }.onSuccess { deck ->
                 _openDeckEvents.emit(deck.deckRunId)
             }.onFailure { error ->
@@ -111,6 +117,22 @@ class HomeViewModel(
         }
     }
 
+    fun selectDeck(themeId: String, trackId: String?) {
+        viewModelScope.launch {
+            deckSelectionPreferences.setSelectedThemeId(themeId)
+            if (!trackId.isNullOrBlank()) {
+                deckSelectionPreferences.setSelectedTrackId(trackId)
+            }
+            _uiState.update {
+                it.copy(
+                    selectedDeckThemeId = themeId,
+                    selectedTrackId = trackId ?: it.selectedTrackId
+                )
+            }
+            loadHome()
+        }
+    }
+
     fun refreshHome() {
         loadHome()
     }
@@ -120,7 +142,7 @@ class HomeViewModel(
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
                 repository.initialize()
-                repository.getHomeSnapshot()
+                repository.getHomeSnapshot(trackId = _uiState.value.selectedTrackId)
             }.onSuccess { snapshot ->
                 _uiState.update {
                     it.copy(
@@ -133,6 +155,9 @@ class HomeViewModel(
                         shouldShowDailyReminder = snapshot.shouldShowDailyReminder,
                         powerUps = snapshot.powerUps,
                         packs = snapshot.packs,
+                        lifetimeScore = snapshot.lifetimeScore,
+                        lifetimeCardsReviewed = snapshot.lifetimeCardsReviewed,
+                        recentRuns = snapshot.recentRuns,
                         selectedPackId = it.selectedPackId ?: snapshot.packs.firstOrNull()?.packId
                     )
                 }

@@ -10,32 +10,46 @@ class N5SeedContentTest {
     fun build_returnsExpectedMvpShape() {
         val bundle = N5SeedContent.build()
 
-        assertEquals(1, bundle.tracks.size)
-        assertEquals(10, bundle.packs.size)
-        assertEquals(200, bundle.cards.size)
-        assertEquals(200, bundle.templates.size)
-        assertEquals(200, bundle.packCards.size)
-        assertEquals(10, bundle.progress.size)
-        assertEquals(1, bundle.progress.count { it.status.name == "UNLOCKED" })
+        assertEquals(4, bundle.tracks.size)
+        assertTrue(bundle.tracks.any { it.trackId == "jlpt_n5_core" })
+        assertTrue(bundle.tracks.any { it.trackId == "school" })
+        assertTrue(bundle.tracks.any { it.trackId == "work" })
+        assertTrue(bundle.tracks.any { it.trackId == "conversation" })
+        assertTrue(bundle.packs.size >= 20)
+        assertTrue(bundle.cards.size >= 500)
+        assertEquals(bundle.cards.size, bundle.packCards.size)
+        assertEquals(bundle.packs.size, bundle.progress.size)
+        assertEquals(bundle.tracks.size, bundle.progress.count { it.status.name == "UNLOCKED" })
     }
 
     @Test
     fun build_cardsAreUnique() {
         val bundle = N5SeedContent.build()
         val uniqueCardIds = bundle.cards.map { it.cardId }.toSet()
-        val uniqueTargets = bundle.cards.map { it.canonicalAnswer }.toSet()
 
-        assertEquals(200, uniqueCardIds.size)
-        assertEquals(200, uniqueTargets.size)
+        assertEquals(bundle.cards.size, uniqueCardIds.size)
         assertTrue(bundle.cards.all { it.prompt.isNotBlank() })
         assertTrue(bundle.cards.none { it.prompt.startsWith("Core meaning") })
         assertEquals("one", bundle.cards.first().prompt)
-        assertTrue(bundle.cards.all { it.acceptedAnswersRaw == it.canonicalAnswer })
+        assertTrue(
+            bundle.cards.all { card ->
+                card.acceptedAnswersRaw
+                    .split("|")
+                    .map { it.trim() }
+                    .contains(card.canonicalAnswer)
+            }
+        )
+        val cardIds = uniqueCardIds
+        val packIds = bundle.packs.map { it.packId }.toSet()
+        assertTrue(bundle.packCards.all { it.cardId in cardIds })
+        assertTrue(bundle.packCards.all { it.packId in packIds })
     }
 
     @Test
     fun build_templatesContainStrokeGeometry() {
         val bundle = N5SeedContent.build()
+        val kanjiWriteCards = bundle.cards.count { it.type.name == "KANJI_WRITE" }
+        assertEquals(kanjiWriteCards, bundle.templates.size)
         assertTrue(bundle.templates.all { it.strokePaths.isNotBlank() })
         assertTrue(
             bundle.templates.all { template ->

@@ -9,6 +9,7 @@ data class DeckThemeOption(
     val difficulty: String,
     val category: String,
     @DrawableRes val heroRes: Int,
+    val contentTrackId: String?,
     val levels: List<DeckLevelOption>
 )
 
@@ -24,6 +25,7 @@ val deckThemeCatalog = listOf(
         "Beginner",
         "JLPT",
         R.drawable.hero_spring,
+        contentTrackId = "jlpt_n5_core",
         levels = listOf(
             DeckLevelOption(1, "Basics"),
             DeckLevelOption(2, "Everyday Kanji"),
@@ -38,6 +40,7 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "JLPT",
         R.drawable.hero_summer,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "N4 Foundation"),
             DeckLevelOption(2, "Common Patterns"),
@@ -52,6 +55,7 @@ val deckThemeCatalog = listOf(
         "Intermediate",
         "JLPT",
         R.drawable.hero_autumn,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "Kanji Expansion"),
             DeckLevelOption(2, "Mixed Readings"),
@@ -66,6 +70,7 @@ val deckThemeCatalog = listOf(
         "Beginner",
         "Theme",
         R.drawable.pack_scene_city,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "Home"),
             DeckLevelOption(2, "School"),
@@ -80,6 +85,7 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "Theme",
         R.drawable.pack_scene_food,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "Ingredients"),
             DeckLevelOption(2, "Ordering"),
@@ -94,6 +100,7 @@ val deckThemeCatalog = listOf(
         "Intermediate",
         "Theme",
         R.drawable.pack_scene_mountain,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "Stations"),
             DeckLevelOption(2, "Tickets"),
@@ -108,12 +115,58 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "Theme",
         R.drawable.pack_scene_temple,
+        contentTrackId = null,
         levels = listOf(
             DeckLevelOption(1, "Numbers"),
             DeckLevelOption(2, "Items"),
             DeckLevelOption(3, "Payments"),
             DeckLevelOption(4, "Comparisons"),
             DeckLevelOption(5, "Conversations")
+        )
+    ),
+    DeckThemeOption(
+        "school",
+        "School Situations",
+        "Beginner",
+        "Theme",
+        R.drawable.pack_scene_temple,
+        contentTrackId = "school",
+        levels = listOf(
+            DeckLevelOption(1, "Classroom"),
+            DeckLevelOption(2, "Homework"),
+            DeckLevelOption(3, "Rules & Requests"),
+            DeckLevelOption(4, "Clubs & Plans"),
+            DeckLevelOption(5, "Dialogs")
+        )
+    ),
+    DeckThemeOption(
+        "work",
+        "Work Situations",
+        "Beginner+",
+        "Theme",
+        R.drawable.pack_scene_city,
+        contentTrackId = "work",
+        levels = listOf(
+            DeckLevelOption(1, "Office Basics"),
+            DeckLevelOption(2, "Meetings"),
+            DeckLevelOption(3, "Requests"),
+            DeckLevelOption(4, "Deadlines"),
+            DeckLevelOption(5, "Dialogs")
+        )
+    ),
+    DeckThemeOption(
+        "conversation",
+        "Everyday Conversation",
+        "Beginner",
+        "Theme",
+        R.drawable.pack_scene_mountain,
+        contentTrackId = "conversation",
+        levels = listOf(
+            DeckLevelOption(1, "Greetings"),
+            DeckLevelOption(2, "Help & Directions"),
+            DeckLevelOption(3, "Plans"),
+            DeckLevelOption(4, "Common Patterns"),
+            DeckLevelOption(5, "Dialogs")
         )
     )
 )

@@ -9,6 +9,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.dao.KitsuneDao
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunCardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
@@ -21,6 +22,9 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.UserPackProgressE
 import com.kitsune.kanji.japanese.flashcards.data.seed.N5SeedContent
 import com.kitsune.kanji.japanese.flashcards.domain.model.CardSubmission
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard
+import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunCardReport
+import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
+import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
@@ -42,16 +46,19 @@ import kotlin.random.Random
 
 interface KitsuneRepository {
     suspend fun initialize()
-    suspend fun getHomeSnapshot(): HomeSnapshot
+    suspend fun getHomeSnapshot(trackId: String): HomeSnapshot
     suspend fun getPowerUps(): List<PowerUpInventory>
     suspend fun dismissDailyReminder()
-    suspend fun createOrLoadDailyDeck(): DeckSession
+    suspend fun createOrLoadDailyDeck(trackId: String): DeckSession
     suspend fun createOrLoadExamDeck(packId: String): DeckSession
     suspend fun loadDeck(deckRunId: String): DeckSession?
     suspend fun loadTemplate(templateId: String): StrokeTemplate?
     suspend fun loadTemplateForTarget(target: String): StrokeTemplate?
+    suspend fun consumePowerUp(id: String): Boolean
+    suspend fun reorderDeckCards(deckRunId: String, cardIdsInOrder: List<String>)
     suspend fun submitCard(deckRunId: String, submission: CardSubmission)
     suspend fun submitDeck(deckRunId: String): DeckResult?
+    suspend fun getDeckRunReport(deckRunId: String): DeckRunReport?
 }
 
 class KitsuneRepositoryImpl(
@@ -63,13 +70,28 @@ class KitsuneRepositoryImpl(
 ) : KitsuneRepository {
     override suspend fun initialize() {
         powerUpPreferences.ensureStarterBundle()
+        val seed = N5SeedContent.build()
         if (dao.countCards() > 0) {
+            database.withTransaction {
+                dao.insertTracks(seed.tracks)
+                dao.insertPacks(seed.packs)
+                dao.insertCards(seed.cards)
+                dao.insertTemplates(seed.templates)
+                dao.insertPackCards(seed.packCards)
+
+                // Only add progress rows for newly introduced packs.
+                val existingProgress = dao.getPackProgress(seed.packs.map { it.packId })
+                    .associateBy { it.packId }
+                val missing = seed.progress.filter { it.packId !in existingProgress }
+                if (missing.isNotEmpty()) {
+                    dao.insertUserPackProgress(missing)
+                }
+            }
             ensureStreakState()
             ensurePlacementAndAbility()
             return
         }
 
-        val seed = N5SeedContent.build()
         database.withTransaction {
             dao.insertTracks(seed.tracks)
             dao.insertPacks(seed.packs)
@@ -89,14 +111,15 @@ class KitsuneRepositoryImpl(
         ensurePlacementAndAbility()
     }
 
-    override suspend fun getHomeSnapshot(): HomeSnapshot {
+    override suspend fun getHomeSnapshot(trackId: String): HomeSnapshot {
         val today = cycleDate()
-        val track = dao.getTracks().first()
+        val track = dao.getTracks().firstOrNull { it.trackId == trackId }
+            ?: dao.getTracks().first()
         val packs = dao.getPacks(track.trackId)
         val progressMap = dao.getPackProgress(packs.map { it.packId }).associateBy { it.packId }
         val hasStartedDailyChallenge = dao.getDeckRunBySource(
             deckType = DeckType.DAILY,
-            sourceId = "daily-$today"
+            sourceId = dailySourceId(track.trackId, today)
         ) != null
         val shouldShowDailyReminder = !hasStartedDailyChallenge &&
             powerUpPreferences.shouldShowDailyReminder(today)
@@ -128,6 +151,20 @@ class KitsuneRepositoryImpl(
             )
         }
         val rankSummary = computeRankSummary(trackId = track.trackId)
+        val accomplishment = dao.getScoreAccomplishmentSummary()
+        val recentRuns = dao.getRecentDeckRunHistory(limit = 20)
+            .map { row ->
+                DeckRunHistoryItem(
+                    deckRunId = row.deckRunId,
+                    deckType = row.deckType,
+                    sourceId = row.sourceId,
+                    submittedAtEpochMillis = row.submittedAtEpochMillis,
+                    totalScore = row.totalScore,
+                    grade = gradeFor(row.totalScore),
+                    cardsReviewed = row.cardsReviewed,
+                    totalCards = row.totalCards
+                )
+            }
 
         return HomeSnapshot(
             trackId = track.trackId,
@@ -138,7 +175,10 @@ class KitsuneRepositoryImpl(
             shouldShowDailyReminder = shouldShowDailyReminder,
             rankSummary = rankSummary,
             powerUps = powerUpPreferences.getInventory(),
-            packs = packProgress
+            packs = packProgress,
+            lifetimeScore = accomplishment.lifetimeScore,
+            lifetimeCardsReviewed = accomplishment.reviewedCards,
+            recentRuns = recentRuns
         )
     }
 
@@ -151,24 +191,27 @@ class KitsuneRepositoryImpl(
         powerUpPreferences.markDailyReminderDismissed(today)
     }
 
-    override suspend fun createOrLoadDailyDeck(): DeckSession {
+    override suspend fun createOrLoadDailyDeck(trackId: String): DeckSession {
         val today = cycleDate()
-        val sourceId = "daily-$today"
+        val sourceId = dailySourceId(trackId, today)
         val existing = dao.getActiveDeckRunBySource(DeckType.DAILY, sourceId)
         if (existing != null) {
             return loadDeck(existing.deckRunId) ?: error("Failed to load existing daily deck")
         }
 
-        val track = dao.getTracks().first()
+        val track = dao.getTracks().firstOrNull { it.trackId == trackId }
+            ?: dao.getTracks().first()
         val abilityState = loadOrCreateTrackAbility(track.trackId)
-        val unlockedCards = dao.getUnlockedCards()
+        val unlockedCards = dao.getUnlockedCardsForTrack(track.trackId)
         if (unlockedCards.isEmpty()) error("No unlocked cards available.")
         val retryCards = dao.getCardsByIds(
-            dao.getRetryCardIds(retryBelowScore = 70, limit = 8)
+            dao.getRetryCardIdsForTrack(trackId = track.trackId, retryBelowScore = 70, limit = 8)
         )
-        val dueCount = dao.getDueCardCount(today.toString())
-        val dueCards = dao.getCardsByIds(dao.getDueCardIds(today.toString(), limit = 24))
-        val attemptedIds = dao.getAttemptedCardIds().toSet()
+        val dueCount = dao.getDueCardCountForTrack(todayIso = today.toString(), trackId = track.trackId)
+        val dueCards = dao.getCardsByIds(
+            dao.getDueCardIdsForTrack(todayIso = today.toString(), trackId = track.trackId, limit = 24)
+        )
+        val attemptedIds = dao.getAttemptedCardIdsForTrack(trackId = track.trackId).toSet()
         val newCards = unlockedCards.filter { it.cardId !in attemptedIds }
         val chosenCards = pickDailyCards(
             today = today,
@@ -223,11 +266,14 @@ class KitsuneRepositoryImpl(
             DeckCard(
                 cardId = row.cardId,
                 position = row.position,
+                type = row.type,
                 prompt = row.prompt,
                 canonicalAnswer = row.canonicalAnswer,
                 acceptedAnswers = acceptedAnswers,
                 reading = row.reading,
                 meaning = row.meaning,
+                promptFurigana = row.promptFurigana,
+                choices = parseChoices(row.choicesRaw),
                 difficulty = row.difficulty,
                 templateId = row.templateId,
                 resultScore = row.resultScore,
@@ -251,6 +297,18 @@ class KitsuneRepositoryImpl(
     override suspend fun loadTemplateForTarget(target: String): StrokeTemplate? {
         val template = dao.getTemplateByTarget(target) ?: return null
         return mapTemplate(template)
+    }
+
+    override suspend fun consumePowerUp(id: String): Boolean {
+        return powerUpPreferences.consumePowerUp(id)
+    }
+
+    override suspend fun reorderDeckCards(deckRunId: String, cardIdsInOrder: List<String>) {
+        database.withTransaction {
+            cardIdsInOrder.forEachIndexed { index, cardId ->
+                dao.updateDeckCardPosition(deckRunId = deckRunId, cardId = cardId, position = index + 1)
+            }
+        }
     }
 
     private fun mapTemplate(
@@ -306,6 +364,9 @@ class KitsuneRepositoryImpl(
             scoreKnowledge = submission.knowledgeScore,
             assistCount = appliedAssists.size,
             assistsRaw = appliedAssists.joinToString("|"),
+            matchedAnswer = submission.matchedAnswer,
+            canonicalAnswer = submission.canonicalAnswer,
+            isCanonicalMatch = submission.isCanonicalMatch,
             feedback = submission.feedback
         )
 
@@ -361,6 +422,38 @@ class KitsuneRepositoryImpl(
             deck = deck,
             totalScore = average,
             unlockedPackId = unlockedPackId
+        )
+    }
+
+    override suspend fun getDeckRunReport(deckRunId: String): DeckRunReport? {
+        val deck = dao.getDeckRun(deckRunId) ?: return null
+        val cards = dao.getDeckRunReportCards(deckRunId)
+        val totalScore = deck.totalScore ?: (dao.getDeckAverageScore(deckRunId) ?: 0.0).roundToInt()
+        val totalCards = cards.size
+        val reviewedCards = cards.count { it.resultScore != null }
+
+        return DeckRunReport(
+            deckRunId = deck.deckRunId,
+            deckType = deck.deckType,
+            sourceId = deck.sourceId,
+            startedAtEpochMillis = deck.startedAtEpochMillis,
+            submittedAtEpochMillis = deck.submittedAtEpochMillis,
+            totalScore = totalScore,
+            grade = gradeFor(totalScore),
+            cardsReviewed = reviewedCards,
+            totalCards = totalCards,
+            cards = cards.map { row ->
+                DeckRunCardReport(
+                    cardId = row.cardId,
+                    position = row.position,
+                    prompt = row.prompt,
+                    canonicalAnswer = row.canonicalAnswer,
+                    userAnswer = row.matchedAnswer,
+                    score = row.resultScore,
+                    effectiveScore = row.effectiveScore,
+                    comment = row.feedback
+                )
+            }
         )
     }
 
@@ -626,6 +719,13 @@ class KitsuneRepositoryImpl(
         return withCanonical.distinct()
     }
 
+    private fun parseChoices(raw: String?): List<String> {
+        return raw.orEmpty()
+            .split('|')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+
     private suspend fun computeRankSummary(trackId: String): UserRankSummary {
         val ability = loadOrCreateTrackAbility(trackId)
         val totalWords = dao.getTrackCardCount(trackId).coerceAtLeast(1)
@@ -683,7 +783,8 @@ class KitsuneRepositoryImpl(
 
     private suspend fun ensurePlacementAndAbility() {
         val alreadyApplied = onboardingPreferences.isPlacementApplied()
-        val track = dao.getTracks().firstOrNull() ?: return
+        val tracks = dao.getTracks()
+        if (tracks.isEmpty()) return
         val level = onboardingPreferences.getLearnerLevel()
         val targetPackLevel = when (level) {
             LearnerLevel.BEGINNER_N5 -> 1
@@ -692,27 +793,33 @@ class KitsuneRepositoryImpl(
             LearnerLevel.ADVANCED_N2 -> 9
             LearnerLevel.UNSURE -> 2
         }
-        if (!alreadyApplied) {
+
+        // Always ensure every track is unlocked up to the placement level, so newly added decks
+        // become playable even if onboarding was completed earlier.
+        tracks.forEach { track ->
             unlockPacksUpTo(track.trackId, targetPackLevel)
-            onboardingPreferences.setPlacementApplied(true)
-        }
-        if (dao.getTrackAbility(track.trackId) == null) {
-            val initialAbility = when (level) {
-                LearnerLevel.BEGINNER_N5 -> 1.5f
-                LearnerLevel.BEGINNER_PLUS_N4 -> 3.0f
-                LearnerLevel.INTERMEDIATE_N3 -> 6.0f
-                LearnerLevel.ADVANCED_N2 -> 9.0f
-                LearnerLevel.UNSURE -> 2.0f
-            }
-            dao.upsertTrackAbility(
-                TrackAbilityEntity(
-                    trackId = track.trackId,
-                    abilityLevel = initialAbility,
-                    rollingScore = 76f,
-                    sampleCount = 0,
-                    lastUpdatedEpochMillis = Instant.now().toEpochMilli()
+            if (dao.getTrackAbility(track.trackId) == null) {
+                val initialAbility = when (level) {
+                    LearnerLevel.BEGINNER_N5 -> 1.5f
+                    LearnerLevel.BEGINNER_PLUS_N4 -> 3.0f
+                    LearnerLevel.INTERMEDIATE_N3 -> 6.0f
+                    LearnerLevel.ADVANCED_N2 -> 9.0f
+                    LearnerLevel.UNSURE -> 2.0f
+                }
+                dao.upsertTrackAbility(
+                    TrackAbilityEntity(
+                        trackId = track.trackId,
+                        abilityLevel = initialAbility,
+                        rollingScore = 76f,
+                        sampleCount = 0,
+                        lastUpdatedEpochMillis = Instant.now().toEpochMilli()
+                    )
                 )
-            )
+            }
+        }
+
+        if (!alreadyApplied) {
+            onboardingPreferences.setPlacementApplied(true)
         }
     }
 
@@ -798,6 +905,10 @@ class KitsuneRepositoryImpl(
     private suspend fun cycleDate(): LocalDate {
         val schedule = dailySchedulePreferences.getSchedule()
         return DailyChallengeClock.currentCycleDate(schedule = schedule)
+    }
+
+    private fun dailySourceId(trackId: String, today: LocalDate): String {
+        return "$trackId-daily-$today"
     }
 
     private data class ScoreQuality(

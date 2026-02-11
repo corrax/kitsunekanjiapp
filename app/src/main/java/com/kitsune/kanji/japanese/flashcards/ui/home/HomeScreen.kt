@@ -21,13 +21,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -66,6 +67,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitsune.kanji.japanese.flashcards.R
+import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
@@ -282,7 +284,7 @@ fun HomeScreen(
                                     color = MaterialTheme.colorScheme.secondary,
                                     fontWeight = FontWeight.SemiBold
                                 )
-                                if (selectedDeckTheme.id != "jlpt_n5") {
+                                if (selectedDeckTheme.contentTrackId == null) {
                                     Text(
                                         text = "Preview deck (content coming soon)",
                                         style = MaterialTheme.typography.bodySmall,
@@ -514,9 +516,9 @@ private fun PowerUpTray(
 
 private fun iconForPowerUp(powerUpId: String): ImageVector {
     return when (powerUpId) {
-        "second_chance" -> Icons.Filled.Pets
-        "hint_brush" -> Icons.Filled.MenuBook
-        "reveal_radical" -> Icons.Filled.AutoFixHigh
+        PowerUpPreferences.POWER_UP_LUCKY_COIN -> Icons.Filled.Casino
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Lightbulb
+        PowerUpPreferences.POWER_UP_INSIGHT_LENS -> Icons.Filled.Visibility
         else -> Icons.Filled.AutoFixHigh
     }
 }
