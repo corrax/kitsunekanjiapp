@@ -135,6 +135,17 @@ interface KitsuneDao {
 
     @Query(
         """
+        SELECT p.trackId
+        FROM pack_cards pc
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE pc.cardId = :cardId
+        LIMIT 1
+        """
+    )
+    suspend fun getTrackIdForCard(cardId: String): String?
+
+    @Query(
+        """
         SELECT DISTINCT ca.cardId
         FROM card_attempts ca
         INNER JOIN pack_cards pc ON pc.cardId = ca.cardId
@@ -286,11 +297,13 @@ interface KitsuneDao {
         """
         SELECT drc.cardId AS cardId,
                drc.position AS position,
+               c.type AS type,
                c.prompt AS prompt,
                c.canonicalAnswer AS canonicalAnswer,
                drc.resultScore AS resultScore,
                ca.scoreEffective AS effectiveScore,
                ca.matchedAnswer AS matchedAnswer,
+               ca.strokePathsRaw AS strokePathsRaw,
                ca.feedback AS feedback
         FROM deck_run_cards drc
         INNER JOIN cards c ON c.cardId = drc.cardId
@@ -308,6 +321,53 @@ interface KitsuneDao {
         """
     )
     suspend fun getDeckRunReportCards(deckRunId: String): List<DeckRunReportCardRow>
+
+    @Query(
+        """
+        SELECT ca.attemptId AS attemptId,
+               ca.deckRunId AS deckRunId,
+               ca.cardId AS cardId,
+               c.prompt AS prompt,
+               c.canonicalAnswer AS canonicalAnswer,
+               ca.matchedAnswer AS matchedAnswer,
+               ca.strokePathsRaw AS strokePathsRaw,
+               ca.scoreTotal AS scoreTotal,
+               ca.scoreEffective AS scoreEffective,
+               dr.deckType AS deckType,
+               dr.sourceId AS sourceId,
+               p.title AS packTitle,
+               ca.createdAtEpochMillis AS attemptedAtEpochMillis
+        FROM card_attempts ca
+        INNER JOIN cards c ON c.cardId = ca.cardId
+        INNER JOIN deck_runs dr ON dr.deckRunId = ca.deckRunId
+        LEFT JOIN packs p
+            ON dr.deckType = 'EXAM'
+           AND p.packId = dr.sourceId
+        WHERE c.type = :cardType
+        ORDER BY ca.createdAtEpochMillis DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getCardAttemptHistory(
+        cardType: CardType,
+        limit: Int
+    ): List<CardAttemptHistoryRow>
+
+    @Query(
+        """
+        SELECT ca.attemptId AS attemptId,
+               ca.deckRunId AS deckRunId,
+               ca.cardId AS cardId,
+               ca.scoreEffective AS scoreEffective,
+               dr.deckType AS deckType,
+               dr.sourceId AS sourceId
+        FROM card_attempts ca
+        INNER JOIN deck_runs dr ON dr.deckRunId = ca.deckRunId
+        WHERE ca.attemptId = :attemptId
+        LIMIT 1
+        """
+    )
+    suspend fun getRetestAttemptContext(attemptId: String): RetestAttemptContextRow?
 
     @Query("SELECT * FROM srs_state WHERE cardId = :cardId")
     suspend fun getSrsState(cardId: String): SrsStateEntity?
@@ -374,10 +434,37 @@ data class DeckRunHistoryRow(
 data class DeckRunReportCardRow(
     val cardId: String,
     val position: Int,
+    val type: CardType,
     val prompt: String,
     val canonicalAnswer: String,
     val resultScore: Int?,
     val effectiveScore: Int?,
     val matchedAnswer: String?,
+    val strokePathsRaw: String?,
     val feedback: String?
+)
+
+data class CardAttemptHistoryRow(
+    val attemptId: String,
+    val deckRunId: String,
+    val cardId: String,
+    val prompt: String,
+    val canonicalAnswer: String,
+    val matchedAnswer: String,
+    val strokePathsRaw: String?,
+    val scoreTotal: Int,
+    val scoreEffective: Int,
+    val deckType: DeckType,
+    val sourceId: String,
+    val packTitle: String?,
+    val attemptedAtEpochMillis: Long
+)
+
+data class RetestAttemptContextRow(
+    val attemptId: String,
+    val deckRunId: String,
+    val cardId: String,
+    val scoreEffective: Int,
+    val deckType: DeckType,
+    val sourceId: String
 )

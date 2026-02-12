@@ -10,7 +10,9 @@ data class InkStroke(
 )
 
 data class InkSample(
-    val strokes: List<InkStroke>
+    val strokes: List<InkStroke>,
+    val canvasWidth: Float? = null,
+    val canvasHeight: Float? = null
 )
 
 data class HandwritingScore(

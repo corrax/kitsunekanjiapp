@@ -119,6 +119,7 @@ data class CardAttemptEntity(
     val assistCount: Int,
     val assistsRaw: String,
     val matchedAnswer: String,
+    val strokePathsRaw: String?,
     val canonicalAnswer: String,
     val isCanonicalMatch: Boolean,
     val feedback: String
@@ -137,6 +138,7 @@ data class SrsStateEntity(
 data class StreakStateEntity(
     @PrimaryKey val id: Int = 0,
     val currentStreak: Int,
+    val currentStreakScore: Int,
     val bestStreak: Int,
     val lastCompletedDateIso: String?,
     val todayClaimedReward: Boolean

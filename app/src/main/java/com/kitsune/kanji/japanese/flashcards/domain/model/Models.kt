@@ -8,6 +8,7 @@ data class HomeSnapshot(
     val trackId: String,
     val trackTitle: String,
     val currentStreak: Int,
+    val currentStreakScore: Int,
     val bestStreak: Int,
     val hasStartedDailyChallenge: Boolean,
     val shouldShowDailyReminder: Boolean,
@@ -97,6 +98,7 @@ data class CardSubmission(
     val isCanonicalMatch: Boolean,
     val requestedAssists: List<String>,
     val strokeCount: Int,
+    val strokePathsRaw: String?,
     val feedback: String
 )
 
@@ -136,10 +138,28 @@ data class DeckRunReport(
 data class DeckRunCardReport(
     val cardId: String,
     val position: Int,
+    val type: CardType,
     val prompt: String,
     val canonicalAnswer: String,
     val userAnswer: String?,
     val score: Int?,
     val effectiveScore: Int?,
+    val strokePathsRaw: String?,
     val comment: String?
+)
+
+data class KanjiAttemptHistoryItem(
+    val attemptId: String,
+    val deckRunId: String,
+    val deckSourceId: String,
+    val cardId: String,
+    val prompt: String,
+    val canonicalAnswer: String,
+    val userAnswer: String,
+    val strokePathsRaw: String?,
+    val scoreTotal: Int,
+    val scoreEffective: Int,
+    val deckType: DeckType,
+    val deckLabel: String,
+    val attemptedAtEpochMillis: Long
 )

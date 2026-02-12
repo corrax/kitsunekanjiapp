@@ -28,6 +28,9 @@ data class DeckUiState(
     val session: DeckSession? = null,
     val currentIndex: Int = 0,
     val powerUps: List<PowerUpInventory> = emptyList(),
+    val activeHintCardId: String? = null,
+    val activeHintText: String? = null,
+    val activeHintReveal: LuckyHintReveal? = null,
     val latestFeedback: String? = null,
     val latestScore: Int? = null,
     val latestEffectiveScore: Int? = null,
@@ -39,8 +42,26 @@ data class DeckUiState(
     val deckResult: DeckResult? = null,
     val errorMessage: String? = null
 ) {
+    val activeCards: List<DeckCard>
+        get() = session?.cards?.filter { it.resultScore == null }.orEmpty()
+    val totalCardCount: Int
+        get() = session?.cards?.size ?: 0
+    val reviewedCardCount: Int
+        get() = session?.cards?.count { it.resultScore != null } ?: 0
+    val activeCardCount: Int
+        get() = activeCards.size
     val currentCard: DeckCard?
-        get() = session?.cards?.getOrNull(currentIndex)
+        get() = activeCards.getOrNull(currentIndex)
+}
+
+data class LuckyHintReveal(
+    val kanji: String,
+    val mode: KanjiHintRevealMode
+)
+
+enum class KanjiHintRevealMode {
+    TOP_STROKE_SLICE,
+    TOP_LEFT_QUADRANT
 }
 
 class DeckViewModel(
@@ -66,6 +87,9 @@ class DeckViewModel(
             it.copy(
                 deckRunId = deckRunId,
                 currentIndex = 0,
+                activeHintCardId = null,
+                activeHintText = null,
+                activeHintReveal = null,
                 latestScore = null,
                 latestFeedback = null,
                 latestMatchedAnswer = null,
@@ -86,7 +110,7 @@ class DeckViewModel(
 
     fun goNext() {
         _uiState.update { state ->
-            val maxIndex = (state.session?.cards?.lastIndex ?: 0).coerceAtLeast(0)
+            val maxIndex = (state.activeCardCount - 1).coerceAtLeast(0)
             state.copy(currentIndex = (state.currentIndex + 1).coerceAtMost(maxIndex))
         }
     }
@@ -108,9 +132,13 @@ class DeckViewModel(
     ) {
         val runId = deckRunId ?: return
         val card = _uiState.value.currentCard ?: return
+        val currentVisibleIndex = _uiState.value.currentIndex
         val activeAssists = requestedAssists
             .distinct()
-            .filterNot { it == PowerUpPreferences.POWER_UP_LUCKY_COIN }
+            .filterNot {
+                it == PowerUpPreferences.POWER_UP_LUCKY_COIN ||
+                    it == PowerUpPreferences.POWER_UP_KITSUNE_CHARM
+            }
         viewModelScope.launch {
             runCatching {
                 val bestCandidate = evaluateSubmission(
@@ -130,6 +158,7 @@ class DeckViewModel(
                     isCanonicalMatch = bestCandidate.isCanonical,
                     requestedAssists = activeAssists,
                     strokeCount = sample.strokes.size,
+                    strokePathsRaw = encodeInkSample(sample),
                     feedback = bestCandidate.feedback
                 )
                 repository.submitCard(deckRunId = runId, submission = submission)
@@ -137,7 +166,7 @@ class DeckViewModel(
                 val powerUps = repository.getPowerUps()
                 val reranked = rerankUnrevealedCards(
                     session = refreshed,
-                    currentIndex = _uiState.value.currentIndex
+                    currentCardId = card.cardId
                 )
                 Triple(reranked, bestCandidate, powerUps)
             }.onSuccess { (session, handwriting, powerUps) ->
@@ -146,7 +175,11 @@ class DeckViewModel(
                 _uiState.update {
                     it.copy(
                         session = session,
+                        currentIndex = resolveCurrentIndex(session.cards, currentVisibleIndex),
                         powerUps = powerUps,
+                        activeHintCardId = null,
+                        activeHintText = null,
+                        activeHintReveal = null,
                         latestFeedback = handwriting.feedback,
                         latestScore = handwriting.totalScore,
                         latestEffectiveScore = effectiveScore,
@@ -166,47 +199,10 @@ class DeckViewModel(
     }
 
     fun usePowerUp(powerUpId: String) {
-        if (powerUpId != PowerUpPreferences.POWER_UP_LUCKY_COIN) {
-            return
-        }
-        val runId = deckRunId ?: return
-        val state = _uiState.value
-        val session = state.session ?: return
-        val currentIndex = state.currentIndex
-        if (session.cards.isEmpty() || currentIndex !in session.cards.indices) {
-            return
-        }
-
-        viewModelScope.launch {
-            runCatching {
-                val consumed = repository.consumePowerUp(powerUpId)
-                if (!consumed) error("No Lucky Coin available.")
-
-                val targetIndex = pickRerollTargetIndex(session.cards, currentIndex)
-                    ?: error("No alternative card to reroll into.")
-                val swapped = swapCards(session.cards, currentIndex, targetIndex)
-                repository.reorderDeckCards(
-                    deckRunId = runId,
-                    cardIdsInOrder = swapped.map { it.cardId }
-                )
-                val refreshed = repository.loadDeck(runId) ?: error("Deck not found")
-                val reranked = rerankUnrevealedCards(refreshed, currentIndex)
-                val inventory = repository.getPowerUps()
-                reranked to inventory
-            }.onSuccess { (rerolledSession, powerUps) ->
-                _uiState.update {
-                    it.copy(
-                        session = rerolledSession,
-                        powerUps = powerUps,
-                        latestFeedback = "Lucky Coin rerolled this card.",
-                        errorMessage = null
-                    )
-                }
-            }.onFailure { error ->
-                _uiState.update {
-                    it.copy(errorMessage = error.message ?: "Failed to use Lucky Coin.")
-                }
-            }
+        when (powerUpId) {
+            PowerUpPreferences.POWER_UP_LUCKY_COIN -> useLuckyCoin()
+            PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> useKitsuneCharm()
+            else -> return
         }
     }
 
@@ -239,7 +235,11 @@ class DeckViewModel(
                     it.copy(
                         isLoading = false,
                         session = session,
+                        currentIndex = resolveCurrentIndex(session.cards, it.currentIndex),
                         powerUps = powerUps,
+                        activeHintCardId = null,
+                        activeHintText = null,
+                        activeHintReveal = null,
                         latestMatchedAnswer = null,
                         latestCanonicalAnswer = null,
                         latestIsCanonical = true,
@@ -351,8 +351,79 @@ class DeckViewModel(
     private fun normalizeAnswer(raw: String): String {
         return raw.trim()
             .replace(" ", "")
-            .replace("　", "")
+            .replace("\u3000", "")
             .lowercase()
+    }
+
+    private fun useLuckyCoin() {
+        val state = _uiState.value
+        val card = state.currentCard ?: return
+        viewModelScope.launch {
+            runCatching {
+                val consumed = repository.consumePowerUp(PowerUpPreferences.POWER_UP_LUCKY_COIN)
+                if (!consumed) error("No Lucky Coin available.")
+                val powerUps = repository.getPowerUps()
+                powerUps to luckyHintFor(card)
+            }.onSuccess { (powerUps, hintPayload) ->
+                _uiState.update {
+                    it.copy(
+                        powerUps = powerUps,
+                        activeHintCardId = card.cardId,
+                        activeHintText = hintPayload.text,
+                        activeHintReveal = hintPayload.reveal,
+                        latestFeedback = "Lucky Coin used. Hint revealed.",
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(errorMessage = error.message ?: "Failed to use Lucky Coin.")
+                }
+            }
+        }
+    }
+
+    private fun useKitsuneCharm() {
+        val runId = deckRunId ?: return
+        val state = _uiState.value
+        val session = state.session ?: return
+        val currentCard = state.currentCard ?: return
+        val currentDeckIndex = session.cards.indexOfFirst { it.cardId == currentCard.cardId }
+        if (currentDeckIndex < 0) return
+
+        viewModelScope.launch {
+            runCatching {
+                val consumed = repository.consumePowerUp(PowerUpPreferences.POWER_UP_KITSUNE_CHARM)
+                if (!consumed) error("No Kitsune Charm available.")
+                val targetIndex = pickSwapTargetIndex(session.cards, currentCard.cardId)
+                    ?: error("No unanswered card available to swap in.")
+                val swapped = swapCards(session.cards, currentDeckIndex, targetIndex)
+                repository.reorderDeckCards(
+                    deckRunId = runId,
+                    cardIdsInOrder = swapped.map { it.cardId }
+                )
+                val refreshed = repository.loadDeck(runId) ?: error("Deck not found")
+                val powerUps = repository.getPowerUps()
+                refreshed to powerUps
+            }.onSuccess { (refreshedSession, powerUps) ->
+                _uiState.update {
+                    it.copy(
+                        session = refreshedSession,
+                        currentIndex = resolveCurrentIndex(refreshedSession.cards, it.currentIndex),
+                        powerUps = powerUps,
+                        activeHintCardId = null,
+                        activeHintText = null,
+                        activeHintReveal = null,
+                        latestFeedback = "Kitsune Charm swapped this question.",
+                        errorMessage = null
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(errorMessage = error.message ?: "Failed to use Kitsune Charm.")
+                }
+            }
+        }
     }
 
     companion object {
@@ -390,7 +461,7 @@ private fun scoreHandwritingCandidate(
 ): CandidateScore {
     val isCanonical = matchedAnswer == canonicalAnswer
     val knowledgeScore = if (isCanonical) 100 else 82
-    val total = ((handwritingScore * 0.8f) + (knowledgeScore * 0.2f))
+    val total = ((handwritingScore * HANDWRITING_SCORE_WEIGHT) + (knowledgeScore * KNOWLEDGE_SCORE_WEIGHT))
         .roundToInt()
         .coerceIn(0, 100)
     val answerFeedback = if (isCanonical) {
@@ -409,8 +480,10 @@ private fun scoreHandwritingCandidate(
     )
 }
 
-private fun pickRerollTargetIndex(cards: List<DeckCard>, currentIndex: Int): Int? {
-    val current = cards.getOrNull(currentIndex) ?: return null
+private fun pickSwapTargetIndex(cards: List<DeckCard>, currentCardId: String): Int? {
+    val currentIndex = cards.indexOfFirst { it.cardId == currentCardId }
+    if (currentIndex < 0) return null
+    val current = cards[currentIndex]
     val candidates = cards.withIndex()
         .filter { indexed ->
             indexed.index > currentIndex &&
@@ -442,7 +515,7 @@ private fun swapCards(cards: List<DeckCard>, first: Int, second: Int): List<Deck
     }
 }
 
-private fun rerankUnrevealedCards(session: DeckSession, currentIndex: Int): DeckSession {
+private fun rerankUnrevealedCards(session: DeckSession, currentCardId: String?): DeckSession {
     if (session.cards.isEmpty()) return session
     val answered = session.cards.filter { it.resultScore != null }
     val observedAverage = answered.mapNotNull { it.resultScore }.average().toFloat().takeIf { !it.isNaN() } ?: 78f
@@ -451,6 +524,10 @@ private fun rerankUnrevealedCards(session: DeckSession, currentIndex: Int): Deck
     } else {
         answered.map { it.difficulty }.average().toFloat()
     }
+    val currentIndex = currentCardId
+        ?.let { cardId -> session.cards.indexOfFirst { it.cardId == cardId } }
+        ?.takeIf { it >= 0 }
+        ?: session.cards.indexOfFirst { it.resultScore == null }.coerceAtLeast(0)
     val lockUntil = (currentIndex + 2).coerceAtMost(session.cards.size)
     val prefix = session.cards.take(lockUntil)
     val unrevealed = session.cards.drop(lockUntil).filter { it.resultScore == null }
@@ -467,3 +544,73 @@ private fun rerankUnrevealedCards(session: DeckSession, currentIndex: Int): Deck
     }
     return session.copy(cards = reindexed)
 }
+
+private fun resolveCurrentIndex(cards: List<DeckCard>, preferredIndex: Int): Int {
+    val unansweredCount = cards.count { it.resultScore == null }
+    if (unansweredCount <= 0) return 0
+    return preferredIndex.coerceIn(0, unansweredCount - 1)
+}
+
+private data class LuckyHintPayload(
+    val text: String,
+    val reveal: LuckyHintReveal? = null
+)
+
+private fun luckyHintFor(card: DeckCard): LuckyHintPayload {
+    return when (card.type) {
+        CardType.KANJI_WRITE -> {
+            val answer = card.canonicalAnswer
+            val revealKanji = answer.firstOrNull()?.toString()
+            val revealMode = revealKanji
+                ?.firstOrNull()
+                ?.let { codepoint ->
+                    if (codepoint.code % 2 == 0) {
+                        KanjiHintRevealMode.TOP_STROKE_SLICE
+                    } else {
+                        KanjiHintRevealMode.TOP_LEFT_QUADRANT
+                    }
+                }
+            val text = if (answer.length > 1) {
+                "Hint: partial reveal is shown for the first kanji."
+            } else {
+                "Hint: partial kanji reveal shown below."
+            }
+            LuckyHintPayload(
+                text = text,
+                reveal = if (revealKanji != null && revealMode != null) {
+                    LuckyHintReveal(kanji = revealKanji, mode = revealMode)
+                } else {
+                    null
+                }
+            )
+        }
+
+        CardType.GRAMMAR_CHOICE,
+        CardType.SENTENCE_COMPREHENSION,
+        CardType.VOCAB_READING -> {
+            val answer = card.canonicalAnswer
+            LuckyHintPayload(
+                text = "Hint: answer starts with \"${answer.take(1)}\" and has ${answer.length} character(s)."
+            )
+        }
+
+        else -> {
+            val answer = card.canonicalAnswer
+            LuckyHintPayload(
+                text = "Hint: answer starts with \"${answer.take(1)}\"."
+            )
+        }
+    }
+}
+
+private fun encodeInkSample(sample: InkSample): String? {
+    if (sample.strokes.isEmpty()) return null
+    return sample.strokes.joinToString("|") { stroke ->
+        stroke.points.joinToString(";") { point ->
+            "${point.x},${point.y}"
+        }
+    }.ifBlank { null }
+}
+
+private const val HANDWRITING_SCORE_WEIGHT = 0.90f
+private const val KNOWLEDGE_SCORE_WEIGHT = 0.10f

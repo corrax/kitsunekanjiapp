@@ -32,6 +32,8 @@ import com.kitsune.kanji.japanese.flashcards.ui.billing.PaywallScreen
 import com.kitsune.kanji.japanese.flashcards.ui.deck.DeckScreen
 import com.kitsune.kanji.japanese.flashcards.ui.deck.DeckViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.DeckBrowserScreen
+import com.kitsune.kanji.japanese.flashcards.ui.history.HistoryScreen
+import com.kitsune.kanji.japanese.flashcards.ui.history.HistoryViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.home.HomeScreen
 import com.kitsune.kanji.japanese.flashcards.ui.home.HomeViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingScreen
@@ -50,6 +52,7 @@ private const val routePaywall = "paywall"
 private const val routeDeckBrowser = "deck_browser"
 private const val routeSettings = "settings"
 private const val routeProfile = "profile"
+private const val routeHistory = "history"
 private const val routeHome = "home"
 private const val routeDeck = "deck"
 private const val routeDeckReport = "deck_report"
@@ -183,6 +186,7 @@ fun KitsuneRoot() {
                     onBrowseDecks = { navController.navigate(routeDeckBrowser) },
                     onOpenSettings = { navController.navigate(routeSettings) },
                     onOpenProfile = { navController.navigate(routeProfile) },
+                    onOpenHistory = { navController.navigate(routeHistory) },
                     onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
                 )
             }
@@ -257,6 +261,32 @@ fun KitsuneRoot() {
                 )
             }
 
+            composable(routeHistory) {
+                val viewModel: HistoryViewModel = viewModel(
+                    factory = HistoryViewModel.factory(
+                        repository = appContainer.repository
+                    )
+                )
+                val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                LaunchedEffect(Unit) {
+                    viewModel.load()
+                }
+                LaunchedEffect(Unit) {
+                    viewModel.openDeckEvents.collect { deckRunId ->
+                        navController.navigate("$routeDeck/$deckRunId")
+                    }
+                }
+                HistoryScreen(
+                    state = state,
+                    onBack = { navController.popBackStack() },
+                    onSelectTab = viewModel::selectTab,
+                    onOpenRunReport = { runId ->
+                        navController.navigate("$routeDeckReport/$runId")
+                    },
+                    onRetest = viewModel::startRetest
+                )
+            }
+
             composable(
                 route = "$routeDeck/{deckRunId}",
                 arguments = listOf(navArgument("deckRunId") { type = NavType.StringType })
@@ -287,17 +317,27 @@ fun KitsuneRoot() {
                     },
                     onUsePowerUp = viewModel::usePowerUp,
                     onDeckSubmitted = { runId ->
-                        navController.navigate("$routeDeckReport/$runId")
+                        navController.navigate("$routeDeckReport/$runId?fromSubmit=true") {
+                            popUpTo(routeHome) { inclusive = false }
+                            launchSingleTop = true
+                        }
                     },
                     onSubmitDeck = viewModel::submitDeck
                 )
             }
 
             composable(
-                route = "$routeDeckReport/{deckRunId}",
-                arguments = listOf(navArgument("deckRunId") { type = NavType.StringType })
+                route = "$routeDeckReport/{deckRunId}?fromSubmit={fromSubmit}",
+                arguments = listOf(
+                    navArgument("deckRunId") { type = NavType.StringType },
+                    navArgument("fromSubmit") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    }
+                )
             ) {
                 val deckRunId = checkNotNull(it.arguments?.getString("deckRunId"))
+                val fromSubmit = it.arguments?.getBoolean("fromSubmit") ?: false
                 val viewModel: DeckReportViewModel = viewModel(
                     factory = DeckReportViewModel.factory(
                         repository = appContainer.repository
@@ -309,7 +349,16 @@ fun KitsuneRoot() {
                 val state = viewModel.uiState.collectAsStateWithLifecycle().value
                 DeckReportScreen(
                     state = state,
-                    onBack = { navController.popBackStack() },
+                    onBack = {
+                        if (fromSubmit) {
+                            navController.navigate(routeHome) {
+                                popUpTo(routeHome) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        } else {
+                            navController.popBackStack()
+                        }
+                    },
                     onBackToHome = {
                         navController.navigate(routeHome) {
                             popUpTo(routeHome) { inclusive = false }

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,15 +37,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.DoneAll
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -65,22 +68,29 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.statusBarsPadding
 import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
@@ -92,6 +102,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.ink.InkStroke
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.delay
@@ -113,15 +124,24 @@ fun DeckScreen(
     var selectedChoice by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
     var canvasResetCounter by remember(currentCard?.cardId) { mutableIntStateOf(0) }
     var selectedAssistId by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
+    var pendingPowerUpId by rememberSaveable(state.deckRunId, currentCard?.cardId) {
+        mutableStateOf<String?>(null)
+    }
     var showGestureOverlay by rememberSaveable(state.deckRunId) { mutableStateOf(true) }
     var cardDragX by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var cardDragY by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var scoreBurst by remember(state.deckRunId) { mutableStateOf<ScoreBurstData?>(null) }
     val scoredCards = state.session?.cards?.mapNotNull { it.resultScore }.orEmpty()
-    val reviewedCount = scoredCards.size
-    val totalCards = state.session?.cards?.size ?: 0
+    val reviewedCount = state.reviewedCardCount
+    val totalCards = state.totalCardCount
+    val remainingCount = state.activeCardCount
+    val cardPosition = if (remainingCount == 0) 0 else (state.currentIndex + 1).coerceAtMost(remainingCount)
     val runScoreTotal = scoredCards.sum()
     val runAverageScore = scoredCards.takeIf { it.isNotEmpty() }?.average()?.roundToInt() ?: 0
+    val activeLuckyHint = state.activeHintText
+        ?.takeIf { state.activeHintCardId == currentCard?.cardId }
+    val activeLuckyReveal = state.activeHintReveal
+        ?.takeIf { state.activeHintCardId == currentCard?.cardId }
     val isChoiceCard = currentCard?.choices?.isNotEmpty() == true &&
         currentCard.type in setOf(
             CardType.VOCAB_READING,
@@ -138,7 +158,7 @@ fun DeckScreen(
         val card = currentCard ?: return@remember emptyList()
         val choices = card.choices
         if (
-            selectedAssistId == PowerUpPreferences.POWER_UP_INSIGHT_LENS &&
+            selectedAssistId == PowerUpPreferences.POWER_UP_HINT_BRUSH &&
             choices.size >= 3 &&
             card.canonicalAnswer in choices
         ) {
@@ -219,10 +239,27 @@ fun DeckScreen(
         }
 
         if (currentCard == null) {
-            Text(
-                text = "No cards found for this deck.",
-                modifier = Modifier.align(Alignment.Center)
-            )
+            Column(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = if (totalCards > 0 && reviewedCount >= totalCards) {
+                        "All cards in this session are graded."
+                    } else {
+                        "No cards found for this deck."
+                    },
+                    style = MaterialTheme.typography.titleMedium
+                )
+                if (totalCards > 0 && reviewedCount >= totalCards) {
+                    Button(onClick = onSubmitDeck) {
+                        Text("Submit Deck")
+                    }
+                }
+            }
             return@Box
         }
 
@@ -230,58 +267,66 @@ fun DeckScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = onBack) { Text("Back") }
-                Text(
-                    text = "Card ${state.currentIndex + 1}/${state.session?.cards?.size ?: 0}",
-                    style = MaterialTheme.typography.titleMedium
+                DeckActionPill(
+                    text = "Back",
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    onClick = onBack,
+                    modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = onSubmitDeck) { Text("Submit Deck") }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
+                        .weight(1.2f)
+                        .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xF2FFFFFF))
-                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 9.dp)
+                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Run score: $runScoreTotal",
+                        text = "Card $cardPosition/$remainingCount",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF432B1E)
+                        color = Color(0xFF322117)
                     )
-                }
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color(0xF2FFFFFF))
-                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 9.dp)
-                ) {
                     Text(
-                        text = "Reviewed: $reviewedCount/$totalCards (avg $runAverageScore)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFF432B1E)
+                        text = "$remainingCount remaining",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color(0xFF6D5444)
                     )
                 }
+                DeckActionPill(
+                    text = "Finish",
+                    icon = Icons.Filled.DoneAll,
+                    onClick = onSubmitDeck,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                DeckMetricCard(
+                    icon = Icons.Filled.AutoFixHigh,
+                    title = "Run Score",
+                    value = runScoreTotal.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                DeckMetricCard(
+                    icon = Icons.Filled.Pets,
+                    title = "Reviewed",
+                    value = "$reviewedCount/$totalCards (avg $runAverageScore)",
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             CardStackFrame(
+                modifier = Modifier.weight(1f),
                 dragX = cardDragX,
                 dragY = cardDragY,
                 onDrag = { delta ->
@@ -359,12 +404,24 @@ fun DeckScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color(0xFF6A5A48)
                         )
-                        if (selectedAssistId == PowerUpPreferences.POWER_UP_HINT_BRUSH) {
+                        val assistHint = if (selectedAssistId == PowerUpPreferences.POWER_UP_HINT_BRUSH) {
+                            assistHintTextFor(currentCard)
+                        } else {
+                            null
+                        }
+                        val effectiveHint = activeLuckyHint ?: assistHint
+                        if (effectiveHint != null) {
                             Text(
-                                text = hintTextFor(currentCard),
+                                text = effectiveHint,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = Color(0xFF7A4F34),
                                 fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        if (activeLuckyReveal != null) {
+                            LuckyKanjiRevealHint(
+                                reveal = activeLuckyReveal,
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                         if (currentCard.isRetryQueued) {
@@ -414,9 +471,12 @@ fun DeckScreen(
                 PowerUpFooter(
                     powerUps = state.powerUps,
                     selectedPowerUpId = selectedAssistId,
-                    onSelectedPowerUpChanged = { selectedAssistId = it },
-                    onUseInstantPowerUp = { powerUpId ->
-                        onUsePowerUp(powerUpId)
+                    onPowerUpTapped = { powerUpId ->
+                        if (selectedAssistId == powerUpId && !isInstantPowerUp(powerUpId)) {
+                            selectedAssistId = null
+                        } else {
+                            pendingPowerUpId = powerUpId
+                        }
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -429,8 +489,8 @@ fun DeckScreen(
                         disabledContainerColor = Color(0xFFB5D5C1)
                     ),
                     modifier = Modifier
-                        .height(74.dp)
-                        .width(112.dp)
+                        .height(64.dp)
+                        .width(102.dp)
                 ) {
                     Text(
                         text = "Submit",
@@ -472,6 +532,40 @@ fun DeckScreen(
                     color = MaterialTheme.colorScheme.error
                 )
             }
+        }
+
+        val pendingPowerUp = state.powerUps.firstOrNull { it.id == pendingPowerUpId }
+        if (pendingPowerUp != null) {
+            val activation = powerUpActivationInfo(pendingPowerUp.id)
+            AlertDialog(
+                onDismissRequest = { pendingPowerUpId = null },
+                title = { Text(activation.title) },
+                text = {
+                    Text(
+                        text = "${activation.effect}\n\n${activation.instructions}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (activation.instantUse) {
+                                onUsePowerUp(pendingPowerUp.id)
+                            } else {
+                                selectedAssistId = pendingPowerUp.id
+                            }
+                            pendingPowerUpId = null
+                        }
+                    ) {
+                        Text(if (activation.instantUse) "Use Now" else "Arm Assist")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingPowerUpId = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         if (showGestureOverlay) {
@@ -663,7 +757,79 @@ private fun scoreBurstTierFor(score: Int): ScoreBurstTier {
 }
 
 @Composable
+private fun DeckActionPill(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xEEFFFFFF))
+            .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(
+                imageVector = icon,
+                contentDescription = text,
+                tint = Color(0xFFFF5A00),
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF432B1E),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeckMetricCard(
+    icon: ImageVector,
+    title: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xF2FFFFFF))
+            .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = Color(0xFFFF7B39),
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF684E3E)
+                )
+            }
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF432B1E)
+            )
+        }
+    }
+}
+
+@Composable
 private fun CardStackFrame(
+    modifier: Modifier = Modifier.height(600.dp),
     dragX: Float,
     dragY: Float,
     onDrag: (Offset) -> Unit,
@@ -676,13 +842,11 @@ private fun CardStackFrame(
     val rightHintAlpha = ((dragX - 70f) / 90f).coerceIn(0f, 0.72f)
     val topHintAlpha = ((-dragY - 70f) / 90f).coerceIn(0f, 0.72f)
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(600.dp)
+        modifier = modifier.fillMaxWidth()
     ) {
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .offset(x = 12.dp, y = 10.dp)
                 .rotate(-4f)
                 .clip(RoundedCornerShape(20.dp))
@@ -691,7 +855,7 @@ private fun CardStackFrame(
         )
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .offset(x = (-8).dp, y = 6.dp)
                 .rotate(3f)
                 .clip(RoundedCornerShape(20.dp))
@@ -700,7 +864,7 @@ private fun CardStackFrame(
         )
         Box(
             modifier = Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .offset { IntOffset(dragX.roundToInt(), dragY.roundToInt()) }
                 .zIndex(3f)
                 .pointerInput(Unit) {
@@ -713,13 +877,13 @@ private fun CardStackFrame(
         ) {
             Box(
                 modifier = Modifier
-                    .matchParentSize()
+                    .fillMaxSize()
                     .clip(RoundedCornerShape(20.dp))
                     .background(Color(0xFFFFFDF8))
                     .border(1.dp, Color(0xFFDCC5A9), RoundedCornerShape(20.dp)),
             ) {
                 Column(
-                    modifier = Modifier.matchParentSize(),
+                    modifier = Modifier.fillMaxSize(),
                     content = content
                 )
                 overlay?.invoke(this)
@@ -787,9 +951,11 @@ private fun GestureHelpOverlay(onDismiss: () -> Unit) {
             Text("Drag up to submit a written card for scoring.")
             Text("You can also tap the green Submit button in the footer.")
             Text("Power-ups:")
-            Text("- Lucky Coin: reroll the current card")
-            Text("- Fude Hint: reveal a starter clue")
-            Text("- Insight Lens: remove one wrong option / show context")
+            Text("- Lucky Coin: instant hint for the current question")
+            Text("- Insight Lens: arm assist to narrow options on submit")
+            Text("- Kitsune Charm: swap this card for another unanswered one")
+            Text("Tap a power-up and confirm in the dialog to activate it.")
+            Text("Power-up counts are account inventory shared across decks/challenges.")
             Text("Using assists lowers learning score and schedules faster reinforcement.")
             Text("Accepted variants can pass, but canonical JLPT forms score higher.")
             Text("When ready, submit the full deck from the top-right action.")
@@ -822,12 +988,94 @@ private fun instructionFor(type: CardType): String {
     }
 }
 
-private fun hintTextFor(card: com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard): String {
-    val answer = card.canonicalAnswer
-    val starter = answer.take(1)
+private fun assistHintTextFor(card: com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard): String {
     return when (card.type) {
-        CardType.KANJI_WRITE -> "Hint: reading ${card.reading ?: "--"}"
-        else -> "Hint: starts with \"$starter\""
+        CardType.GRAMMAR_CHOICE,
+        CardType.SENTENCE_COMPREHENSION,
+        CardType.VOCAB_READING -> "Insight Lens armed: one distractor removed."
+        else -> "Insight Lens armed: submit to apply assist penalty and context support."
+    }
+}
+
+@Composable
+private fun LuckyKanjiRevealHint(
+    reveal: LuckyHintReveal,
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(12.dp)
+    Column(
+        modifier = modifier
+            .clip(cardShape)
+            .background(Color(0xFFFFF4E7))
+            .border(1.dp, Color(0xFFD7B189), cardShape)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = luckyRevealLabel(reveal.mode),
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF7A4F34),
+            fontWeight = FontWeight.SemiBold
+        )
+        Box(
+            modifier = Modifier
+                .size(112.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFFFFCF7))
+                .border(1.dp, Color(0xFFDCC0A2), RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = reveal.kanji,
+                color = Color(0xFF7A4F34).copy(alpha = 0.2f),
+                style = MaterialTheme.typography.displayLarge.copy(fontSize = 80.sp)
+            )
+            Text(
+                text = reveal.kanji,
+                modifier = Modifier.partialKanjiReveal(reveal.mode),
+                color = Color(0xFF5C3118),
+                style = MaterialTheme.typography.displayLarge.copy(
+                    fontSize = 80.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            )
+        }
+    }
+}
+
+private fun luckyRevealLabel(mode: KanjiHintRevealMode): String {
+    return when (mode) {
+        KanjiHintRevealMode.TOP_STROKE_SLICE -> "Lucky Coin reveal: first-stroke region"
+        KanjiHintRevealMode.TOP_LEFT_QUADRANT -> "Lucky Coin reveal: top-left quarter"
+    }
+}
+
+private fun Modifier.partialKanjiReveal(mode: KanjiHintRevealMode): Modifier {
+    return drawWithContent {
+        when (mode) {
+            KanjiHintRevealMode.TOP_STROKE_SLICE -> {
+                clipRect(
+                    left = size.width * 0.06f,
+                    top = 0f,
+                    right = size.width * 0.94f,
+                    bottom = size.height * 0.48f
+                ) {
+                    this@drawWithContent.drawContent()
+                }
+            }
+
+            KanjiHintRevealMode.TOP_LEFT_QUADRANT -> {
+                clipRect(
+                    left = 0f,
+                    top = 0f,
+                    right = size.width * 0.54f,
+                    bottom = size.height * 0.54f
+                ) {
+                    this@drawWithContent.drawContent()
+                }
+            }
+        }
     }
 }
 
@@ -943,8 +1191,7 @@ private fun parseFuriganaTokens(text: String): List<FuriganaToken> {
 private fun PowerUpFooter(
     powerUps: List<PowerUpInventory>,
     selectedPowerUpId: String?,
-    onSelectedPowerUpChanged: (String?) -> Unit,
-    onUseInstantPowerUp: (String) -> Unit,
+    onPowerUpTapped: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val selected = powerUps.firstOrNull { it.id == selectedPowerUpId }
@@ -957,47 +1204,76 @@ private fun PowerUpFooter(
             .padding(horizontal = 10.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        Text(
+            text = "Power-Ups (shared account inventory)",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF6A5243),
+            fontWeight = FontWeight.Medium
+        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             powerUps.forEach { powerUp ->
                 val isEnabled = powerUp.count > 0
+                val isArmed = selectedPowerUpId == powerUp.id && !isInstantPowerUp(powerUp.id)
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isEnabled) Color(0xFFFFF1E8) else Color(0xFFF1ECE8))
-                        .border(1.dp, Color(0xFFFFC6A5), RoundedCornerShape(12.dp))
+                        .background(
+                            when {
+                                !isEnabled -> Color(0xFFF1ECE8)
+                                isArmed -> Color(0xFFFFE2CF)
+                                else -> Color(0xFFFFF1E8)
+                            }
+                        )
+                        .border(
+                            1.dp,
+                            if (isArmed) Color(0xFFFF8C4E) else Color(0xFFFFC6A5),
+                            RoundedCornerShape(12.dp)
+                        )
                         .clickable {
                             if (isEnabled) {
-                                if (powerUp.id == PowerUpPreferences.POWER_UP_LUCKY_COIN) {
-                                    onUseInstantPowerUp(powerUp.id)
-                                } else {
-                                    onSelectedPowerUpChanged(
-                                        if (selectedPowerUpId == powerUp.id) null else powerUp.id
-                                    )
-                                }
+                                onPowerUpTapped(powerUp.id)
                             }
                         }
-                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                        .padding(horizontal = 8.dp, vertical = 8.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
-                        Icon(
-                            imageVector = iconForPowerUp(powerUp.id),
-                            contentDescription = powerUp.title,
-                            tint = Color(0xFFFF5A00),
-                            modifier = Modifier.size(20.dp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = iconForPowerUp(powerUp.id),
+                                contentDescription = powerUp.title,
+                                tint = Color(0xFFFF5A00),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = " ${powerUp.count}",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = Color(0xFF4D3A2F),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Text(
+                            text = shortPowerUpTitle(powerUp.id),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF4D3A2F),
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = " ${powerUp.count}",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xFF4D3A2F),
-                            fontWeight = FontWeight.Medium
+                            text = when {
+                                !isEnabled -> "Empty"
+                                isArmed -> "Armed"
+                                isInstantPowerUp(powerUp.id) -> "Tap to use"
+                                else -> "Tap to arm"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF7A5A48)
                         )
                     }
                 }
@@ -1017,9 +1293,62 @@ private fun PowerUpFooter(
 private fun iconForPowerUp(powerUpId: String): ImageVector {
     return when (powerUpId) {
         PowerUpPreferences.POWER_UP_LUCKY_COIN -> Icons.Filled.Casino
-        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Lightbulb
-        PowerUpPreferences.POWER_UP_INSIGHT_LENS -> Icons.Filled.Visibility
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Visibility
+        PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> Icons.Filled.Pets
         else -> Icons.Filled.AutoFixHigh
+    }
+}
+
+private data class PowerUpActivationInfo(
+    val title: String,
+    val effect: String,
+    val instructions: String,
+    val instantUse: Boolean
+)
+
+private fun powerUpActivationInfo(powerUpId: String): PowerUpActivationInfo {
+    return when (powerUpId) {
+        PowerUpPreferences.POWER_UP_LUCKY_COIN -> PowerUpActivationInfo(
+            title = "Use Lucky Coin?",
+            effect = "Reveal a hint for this card now.",
+            instructions = "Hint applies immediately and Lucky Coin is consumed.",
+            instantUse = true
+        )
+
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> PowerUpActivationInfo(
+            title = "Arm Insight Lens?",
+            effect = "Narrow answer options and apply assist penalty on submit.",
+            instructions = "Insight Lens remains armed for this card until you submit or unarm it.",
+            instantUse = false
+        )
+
+        PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> PowerUpActivationInfo(
+            title = "Use Kitsune Charm?",
+            effect = "Swap this question for another unanswered card.",
+            instructions = "Swap happens immediately and Kitsune Charm is consumed.",
+            instantUse = true
+        )
+
+        else -> PowerUpActivationInfo(
+            title = "Use Power-Up?",
+            effect = "Activate this power-up.",
+            instructions = "This action may consume inventory.",
+            instantUse = true
+        )
+    }
+}
+
+private fun isInstantPowerUp(powerUpId: String): Boolean {
+    return powerUpId == PowerUpPreferences.POWER_UP_LUCKY_COIN ||
+        powerUpId == PowerUpPreferences.POWER_UP_KITSUNE_CHARM
+}
+
+private fun shortPowerUpTitle(powerUpId: String): String {
+    return when (powerUpId) {
+        PowerUpPreferences.POWER_UP_LUCKY_COIN -> "Coin"
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> "Lens"
+        PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> "Charm"
+        else -> "Power"
     }
 }
 
@@ -1033,11 +1362,12 @@ private fun InkPad(
     var undoStack by remember { mutableStateOf(listOf<List<List<Offset>>>()) }
     var isEraseMode by remember { mutableStateOf(false) }
     var operationSnapshotTaken by remember { mutableStateOf(false) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     LaunchedEffect(resetCounter) {
         strokes = emptyList()
         undoStack = emptyList()
-        onSampleChanged(InkSample(emptyList()))
+        onSampleChanged(InkSample(emptyList(), canvasSize.width.toFloat(), canvasSize.height.toFloat()))
         isEraseMode = false
         operationSnapshotTaken = false
     }
@@ -1045,8 +1375,14 @@ private fun InkPad(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .border(width = 2.dp, color = Color(0xFFB89B7A), shape = RoundedCornerShape(16.dp))
-            .background(Color(0xFFFFFCF6))
+            .border(width = 1.dp, color = Color(0xFFBFA489), shape = RoundedCornerShape(16.dp))
+            .background(Color(0xFFFFFCF8))
+            .onSizeChanged { size ->
+                canvasSize = size
+                if (strokes.isNotEmpty()) {
+                    onSampleChanged(strokes.toInkSample(canvasSize))
+                }
+            }
             .pointerInput(resetCounter, isEraseMode) {
                 detectDragGestures(
                     onDragStart = { start ->
@@ -1059,7 +1395,7 @@ private fun InkPad(
                         } else {
                             strokes = strokes + listOf(listOf(start))
                         }
-                        onSampleChanged(strokes.toInkSample())
+                        onSampleChanged(strokes.toInkSample(canvasSize))
                     },
                     onDragEnd = {
                         operationSnapshotTaken = false
@@ -1079,14 +1415,45 @@ private fun InkPad(
                                 strokes = updated
                             }
                         }
-                        onSampleChanged(strokes.toInkSample())
+                        onSampleChanged(strokes.toInkSample(canvasSize))
                     }
                 )
             }
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
+            val minDimension = min(size.width, size.height)
+            val guideStroke = (minDimension * 0.012f).coerceAtLeast(1f)
+            val guideColor = Color(0xFFB9A58F)
+            val dash = PathEffect.dashPathEffect(
+                intervals = floatArrayOf(minDimension * 0.05f, minDimension * 0.03f)
+            )
+            val centerX = size.width / 2f
+            val centerY = size.height / 2f
+            drawLine(
+                color = guideColor,
+                start = Offset(centerX, 0f),
+                end = Offset(centerX, size.height),
+                strokeWidth = guideStroke,
+                pathEffect = dash
+            )
+            drawLine(
+                color = guideColor,
+                start = Offset(0f, centerY),
+                end = Offset(size.width, centerY),
+                strokeWidth = guideStroke,
+                pathEffect = dash
+            )
+            val strokeWidth = (minDimension * 0.08f).coerceAtLeast(2f)
             for (stroke in strokes) {
-                if (stroke.size < 2) continue
+                if (stroke.isEmpty()) continue
+                if (stroke.size == 1) {
+                    drawCircle(
+                        color = Color(0xFF2B1E17),
+                        radius = strokeWidth / 2f,
+                        center = stroke.first()
+                    )
+                    continue
+                }
                 val path = Path().apply {
                     moveTo(stroke.first().x, stroke.first().y)
                     for (point in stroke.drop(1)) {
@@ -1095,8 +1462,12 @@ private fun InkPad(
                 }
                 drawPath(
                     path = path,
-                    color = Color(0xFF1E1B18),
-                    style = Stroke(width = 10f, cap = StrokeCap.Round)
+                    color = Color(0xFF2B1E17),
+                    style = Stroke(
+                        width = strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
                 )
             }
         }
@@ -1114,7 +1485,7 @@ private fun InkPad(
             ) {
                 undoStack = undoStack + listOf(strokes)
                 strokes = emptyList()
-                onSampleChanged(InkSample(emptyList()))
+                onSampleChanged(InkSample(emptyList(), canvasSize.width.toFloat(), canvasSize.height.toFloat()))
             }
             InkToolChip(
                 icon = Icons.AutoMirrored.Filled.Undo,
@@ -1126,7 +1497,7 @@ private fun InkPad(
                     val previous = undoStack.last()
                     undoStack = undoStack.dropLast(1)
                     strokes = previous
-                    onSampleChanged(strokes.toInkSample())
+                    onSampleChanged(strokes.toInkSample(canvasSize))
                 }
             }
             val oppositeModeIcon = if (isEraseMode) Icons.Filled.Brush else Icons.AutoMirrored.Filled.Backspace
@@ -1192,8 +1563,10 @@ private fun eraseAt(
     }
 }
 
-private fun List<List<Offset>>.toInkSample(): InkSample {
+private fun List<List<Offset>>.toInkSample(canvasSize: IntSize): InkSample {
     return InkSample(
+        canvasWidth = canvasSize.width.toFloat(),
+        canvasHeight = canvasSize.height.toFloat(),
         strokes = map { stroke ->
             InkStroke(
                 points = stroke.map { point ->

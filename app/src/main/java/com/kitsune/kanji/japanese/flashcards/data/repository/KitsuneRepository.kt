@@ -7,6 +7,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
 import com.kitsune.kanji.japanese.flashcards.data.local.OnboardingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.dao.KitsuneDao
+import com.kitsune.kanji.japanese.flashcards.data.local.dao.RetestAttemptContextRow
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
@@ -28,6 +29,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
+import com.kitsune.kanji.japanese.flashcards.domain.model.KanjiAttemptHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import com.kitsune.kanji.japanese.flashcards.domain.model.StrokeTemplate
@@ -59,6 +61,9 @@ interface KitsuneRepository {
     suspend fun submitCard(deckRunId: String, submission: CardSubmission)
     suspend fun submitDeck(deckRunId: String): DeckResult?
     suspend fun getDeckRunReport(deckRunId: String): DeckRunReport?
+    suspend fun getKanjiAttemptHistory(limit: Int): List<KanjiAttemptHistoryItem>
+    suspend fun getDeckRunHistory(limit: Int): List<DeckRunHistoryItem>
+    suspend fun createRetestDeckForAttempt(attemptId: String): DeckSession
 }
 
 class KitsuneRepositoryImpl(
@@ -102,6 +107,7 @@ class KitsuneRepositoryImpl(
             dao.upsertStreakState(
                 StreakStateEntity(
                     currentStreak = 0,
+                    currentStreakScore = 0,
                     bestStreak = 0,
                     lastCompletedDateIso = null,
                     todayClaimedReward = false
@@ -125,6 +131,7 @@ class KitsuneRepositoryImpl(
             powerUpPreferences.shouldShowDailyReminder(today)
         val streak = dao.getStreakState() ?: StreakStateEntity(
             currentStreak = 0,
+            currentStreakScore = 0,
             bestStreak = 0,
             lastCompletedDateIso = null,
             todayClaimedReward = false
@@ -152,24 +159,13 @@ class KitsuneRepositoryImpl(
         }
         val rankSummary = computeRankSummary(trackId = track.trackId)
         val accomplishment = dao.getScoreAccomplishmentSummary()
-        val recentRuns = dao.getRecentDeckRunHistory(limit = 20)
-            .map { row ->
-                DeckRunHistoryItem(
-                    deckRunId = row.deckRunId,
-                    deckType = row.deckType,
-                    sourceId = row.sourceId,
-                    submittedAtEpochMillis = row.submittedAtEpochMillis,
-                    totalScore = row.totalScore,
-                    grade = gradeFor(row.totalScore),
-                    cardsReviewed = row.cardsReviewed,
-                    totalCards = row.totalCards
-                )
-            }
+        val recentRuns = loadDeckRunHistory(limit = 20)
 
         return HomeSnapshot(
             trackId = track.trackId,
             trackTitle = track.title,
             currentStreak = normalizedStreak.currentStreak,
+            currentStreakScore = normalizedStreak.currentStreakScore,
             bestStreak = normalizedStreak.bestStreak,
             hasStartedDailyChallenge = hasStartedDailyChallenge,
             shouldShowDailyReminder = shouldShowDailyReminder,
@@ -365,6 +361,7 @@ class KitsuneRepositoryImpl(
             assistCount = appliedAssists.size,
             assistsRaw = appliedAssists.joinToString("|"),
             matchedAnswer = submission.matchedAnswer,
+            strokePathsRaw = submission.strokePathsRaw,
             canonicalAnswer = submission.canonicalAnswer,
             isCanonicalMatch = submission.isCanonicalMatch,
             feedback = submission.feedback
@@ -406,7 +403,7 @@ class KitsuneRepositoryImpl(
         database.withTransaction {
             dao.submitDeck(deckRunId, now, average)
             if (deck.deckType == DeckType.DAILY) {
-                applyDailyStreak(today)
+                applyDailyStreak(today, average)
                 powerUpPreferences.awardDailyReward(today)
             } else if (deck.deckType == DeckType.EXAM) {
                 unlockedPackId = updateExamProgress(
@@ -446,20 +443,207 @@ class KitsuneRepositoryImpl(
                 DeckRunCardReport(
                     cardId = row.cardId,
                     position = row.position,
+                    type = row.type,
                     prompt = row.prompt,
                     canonicalAnswer = row.canonicalAnswer,
                     userAnswer = row.matchedAnswer,
                     score = row.resultScore,
                     effectiveScore = row.effectiveScore,
+                    strokePathsRaw = row.strokePathsRaw,
                     comment = row.feedback
                 )
             }
         )
     }
 
-    private suspend fun applyDailyStreak(today: LocalDate) {
+    override suspend fun getKanjiAttemptHistory(limit: Int): List<KanjiAttemptHistoryItem> {
+        return dao.getCardAttemptHistory(
+            cardType = CardType.KANJI_WRITE,
+            limit = limit
+        ).map { row ->
+            KanjiAttemptHistoryItem(
+                attemptId = row.attemptId,
+                deckRunId = row.deckRunId,
+                deckSourceId = row.sourceId,
+                cardId = row.cardId,
+                prompt = row.prompt,
+                canonicalAnswer = row.canonicalAnswer,
+                userAnswer = row.matchedAnswer,
+                strokePathsRaw = row.strokePathsRaw,
+                scoreTotal = row.scoreTotal,
+                scoreEffective = row.scoreEffective,
+                deckType = row.deckType,
+                deckLabel = deckLabelForAttempt(row.deckType, row.sourceId, row.packTitle),
+                attemptedAtEpochMillis = row.attemptedAtEpochMillis
+            )
+        }
+    }
+
+    override suspend fun getDeckRunHistory(limit: Int): List<DeckRunHistoryItem> {
+        return loadDeckRunHistory(limit)
+    }
+
+    override suspend fun createRetestDeckForAttempt(attemptId: String): DeckSession {
+        val context = dao.getRetestAttemptContext(attemptId)
+            ?: error("Attempt not found.")
+        return when (context.deckType) {
+            DeckType.EXAM -> createOrLoadExamDeck(context.sourceId)
+            DeckType.DAILY,
+            DeckType.REMEDIAL -> createAdaptiveRetestDeck(context)
+        }
+    }
+
+    private suspend fun loadDeckRunHistory(limit: Int): List<DeckRunHistoryItem> {
+        return dao.getRecentDeckRunHistory(limit = limit)
+            .map { row ->
+                DeckRunHistoryItem(
+                    deckRunId = row.deckRunId,
+                    deckType = row.deckType,
+                    sourceId = row.sourceId,
+                    submittedAtEpochMillis = row.submittedAtEpochMillis,
+                    totalScore = row.totalScore,
+                    grade = gradeFor(row.totalScore),
+                    cardsReviewed = row.cardsReviewed,
+                    totalCards = row.totalCards
+                )
+            }
+    }
+
+    private suspend fun createAdaptiveRetestDeck(context: RetestAttemptContextRow): DeckSession {
+        val sourceDeckCards = dao.getDeckCards(context.deckRunId)
+        if (sourceDeckCards.isEmpty()) {
+            error("Source deck has no cards.")
+        }
+
+        val sourceCardById = sourceDeckCards.associateBy { it.cardId }
+        val sourceCards = dao.getCardsByIds(sourceDeckCards.map { it.cardId }).associateBy { it.cardId }
+        val anchorSource = sourceCardById[context.cardId] ?: sourceDeckCards.first()
+        val trackId = resolveRetestTrackId(
+            deckType = context.deckType,
+            sourceId = context.sourceId,
+            fallbackCardId = anchorSource.cardId
+        )
+        val sourceId = remedialSourceId(trackId = trackId, attemptId = context.attemptId)
+        val existing = dao.getActiveDeckRunBySource(deckType = DeckType.REMEDIAL, sourceId = sourceId)
+        if (existing != null) {
+            return loadDeck(existing.deckRunId) ?: error("Failed to load existing retest deck.")
+        }
+
+        val weakSourceRows = sourceDeckCards
+            .filter { it.type == CardType.KANJI_WRITE }
+            .sortedWith(
+                compareBy<com.kitsune.kanji.japanese.flashcards.data.local.dao.DeckCardRow> {
+                    it.resultScore ?: 0
+                }.thenBy { it.position }
+            )
+            .filter { row ->
+                row.cardId == context.cardId || (row.resultScore ?: 0) < RETEST_WEAK_SCORE_THRESHOLD
+            }
+        val weakCards = weakSourceRows
+            .mapNotNull { row -> sourceCards[row.cardId] }
+            .distinctBy { it.cardId }
+
+        val unlockedCards = dao.getUnlockedCardsForTrack(trackId)
+        val unlockedKanjiCards = unlockedCards.filter { it.type == CardType.KANJI_WRITE }
+        val candidateCards = unlockedKanjiCards.ifEmpty { unlockedCards }
+        if (candidateCards.isEmpty()) {
+            error("No unlocked cards available for retest.")
+        }
+        val attemptedCardIds = dao.getAttemptedCardIdsForTrack(trackId).toSet()
+        val weakCardIds = weakCards.map { it.cardId }.toSet()
+
+        val referenceDifficulty = weakCards
+            .map { it.difficulty.toFloat() }
+            .takeIf { it.isNotEmpty() }
+            ?.average()
+            ?.toFloat()
+            ?: anchorSource.difficulty.toFloat()
+
+        val targetDifficulty = (referenceDifficulty + 0.8f).coerceIn(1f, 12f)
+        val newCandidatesPrimary = candidateCards
+            .asSequence()
+            .filter { it.cardId !in weakCardIds }
+            .filter { it.cardId !in attemptedCardIds }
+            .filter { it.difficulty >= referenceDifficulty.roundToInt() }
+            .sortedBy { abs(it.difficulty - targetDifficulty) }
+            .toList()
+        val newCandidatesFallback = candidateCards
+            .asSequence()
+            .filter { it.cardId !in weakCardIds }
+            .filter { it.cardId !in attemptedCardIds }
+            .sortedBy { abs(it.difficulty - targetDifficulty) }
+            .toList()
+        val newCandidates = if (newCandidatesPrimary.isNotEmpty()) {
+            newCandidatesPrimary
+        } else {
+            newCandidatesFallback
+        }
+
+        val practiceCandidates = candidateCards
+            .asSequence()
+            .filter { it.cardId !in weakCardIds }
+            .sortedBy { abs(it.difficulty - targetDifficulty) }
+            .toList()
+
+        val random = Random(context.attemptId.hashCode())
+        val selected = LinkedHashMap<String, CardEntity>()
+        val targetSize = N5SeedContent.deckSizeDaily
+        val weakQuota = min(8, weakCards.size.coerceAtLeast(1))
+        val newQuota = 4
+
+        appendCards(
+            selected = selected,
+            cards = weakCards.shuffled(random),
+            quota = weakQuota,
+            targetSize = targetSize
+        )
+        appendCards(
+            selected = selected,
+            cards = newCandidates.shuffled(random),
+            quota = newQuota,
+            targetSize = targetSize
+        )
+        appendCards(
+            selected = selected,
+            cards = practiceCandidates.shuffled(random),
+            quota = targetSize,
+            targetSize = targetSize
+        )
+
+        val selectedCards = selected.values.toList()
+        if (selectedCards.isEmpty()) {
+            error("Failed to build retest card set.")
+        }
+        return createDeckSession(
+            deckType = DeckType.REMEDIAL,
+            sourceId = sourceId,
+            cards = selectedCards,
+            retryCardIds = weakCardIds
+        )
+    }
+
+    private suspend fun resolveRetestTrackId(
+        deckType: DeckType,
+        sourceId: String,
+        fallbackCardId: String
+    ): String {
+        return when (deckType) {
+            DeckType.DAILY -> sourceId.substringBefore("-daily-")
+            DeckType.REMEDIAL -> sourceId.substringAfter("retest:", "").substringBefore(":", "")
+            DeckType.EXAM -> ""
+        }.ifBlank {
+            dao.getTrackIdForCard(fallbackCardId) ?: error("Unable to resolve track for retest.")
+        }
+    }
+
+    private fun remedialSourceId(trackId: String, attemptId: String): String {
+        return "retest:$trackId:$attemptId"
+    }
+
+    private suspend fun applyDailyStreak(today: LocalDate, challengeScore: Int) {
         val state = dao.getStreakState() ?: StreakStateEntity(
             currentStreak = 0,
+            currentStreakScore = 0,
             bestStreak = 0,
             lastCompletedDateIso = null,
             todayClaimedReward = false
@@ -471,11 +655,17 @@ class KitsuneRepositoryImpl(
         }
 
         val nextCurrent = if (last == today.minusDays(1)) state.currentStreak + 1 else 1
+        val nextStreakScore = if (last == today.minusDays(1)) {
+            state.currentStreakScore + challengeScore
+        } else {
+            challengeScore
+        }
         val nextBest = max(state.bestStreak, nextCurrent)
 
         dao.upsertStreakState(
             state.copy(
                 currentStreak = nextCurrent,
+                currentStreakScore = nextStreakScore,
                 bestStreak = nextBest,
                 lastCompletedDateIso = today.toString(),
                 todayClaimedReward = true
@@ -488,6 +678,7 @@ class KitsuneRepositoryImpl(
             dao.upsertStreakState(
                 StreakStateEntity(
                     currentStreak = 0,
+                    currentStreakScore = 0,
                     bestStreak = 0,
                     lastCompletedDateIso = null,
                     todayClaimedReward = false
@@ -689,6 +880,14 @@ class KitsuneRepositoryImpl(
             score >= 75 -> "B"
             score >= 65 -> "C"
             else -> "D"
+        }
+    }
+
+    private fun deckLabelForAttempt(deckType: DeckType, sourceId: String, packTitle: String?): String {
+        return when (deckType) {
+            DeckType.DAILY -> "Daily Challenge"
+            DeckType.EXAM -> packTitle ?: "Exam Pack ($sourceId)"
+            DeckType.REMEDIAL -> "Remedial ($sourceId)"
         }
     }
 
@@ -922,5 +1121,6 @@ class KitsuneRepositoryImpl(
         private const val MAX_STRENGTH = 8
         private const val EASY_DIFFICULTY_MAX = 4
         private const val HARD_DIFFICULTY_MIN = 8
+        private const val RETEST_WEAK_SCORE_THRESHOLD = 75
     }
 }

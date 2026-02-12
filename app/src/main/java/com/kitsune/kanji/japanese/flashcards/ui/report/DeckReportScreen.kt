@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,9 +29,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunCardReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
+import com.kitsune.kanji.japanese.flashcards.ui.common.GenkoyoshiInkPreview
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -68,6 +72,8 @@ fun DeckReportScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
             .background(Color(0xFFF9F3EC))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -111,6 +117,9 @@ fun DeckReportScreen(
                 Text("Back to Home")
             }
         }
+        item {
+            Box(modifier = Modifier.size(1.dp))
+        }
     }
 }
 
@@ -136,7 +145,7 @@ private fun ReportSummaryCard(report: DeckRunReport) {
             color = Color(0xFF6A4E3B)
         )
         Text(
-            text = "Total Score ${report.totalScore} (${report.grade})",
+            text = "Total Score ${report.totalScore}/100 (${report.grade})",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF372418)
@@ -170,10 +179,33 @@ private fun ReportCardItem(card: DeckRunCardReport) {
             fontWeight = FontWeight.SemiBold,
             color = Color(0xFF2F221A)
         )
-        Text(
-            text = "Your answer: ${card.userAnswer ?: "(no answer submitted)"}",
-            style = MaterialTheme.typography.bodyMedium
-        )
+        if (card.type == CardType.KANJI_WRITE) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                GenkoyoshiInkPreview(
+                    strokePathsRaw = card.strokePathsRaw,
+                    modifier = Modifier.size(120.dp)
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Your answer: ${card.userAnswer ?: "(no answer submitted)"}",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        text = "Rendered writing sample",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF6C4E37)
+                    )
+                }
+            }
+        } else {
+            Text(
+                text = "Your answer: ${card.userAnswer ?: "(no answer submitted)"}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
         Text(
             text = "Canonical answer: ${card.canonicalAnswer}",
             style = MaterialTheme.typography.bodyMedium,
@@ -181,10 +213,10 @@ private fun ReportCardItem(card: DeckRunCardReport) {
         )
         Text(
             text = buildString {
-                append("Score: ${card.score ?: 0}")
+                append("Score: ${card.score ?: 0}/100")
                 card.effectiveScore?.let { effective ->
                     if (card.score != effective) {
-                        append(" (learning $effective)")
+                        append(" (learning $effective/100)")
                     }
                 }
             },
@@ -213,7 +245,7 @@ private fun buildShareReportText(report: DeckRunReport): String {
         appendLine("Deck type: ${report.deckType}")
         appendLine("Run ID: ${report.deckRunId}")
         appendLine("Finished: ${formatEpochMillis(report.submittedAtEpochMillis ?: report.startedAtEpochMillis)}")
-        appendLine("Total score: ${report.totalScore} (${report.grade})")
+        appendLine("Total score: ${report.totalScore}/100 (${report.grade})")
         appendLine("Cards reviewed: ${report.cardsReviewed}/${report.totalCards}")
         appendLine()
         appendLine("Card details")
@@ -221,7 +253,7 @@ private fun buildShareReportText(report: DeckRunReport): String {
             appendLine("#${card.position} ${card.prompt}")
             appendLine("  Your answer: ${card.userAnswer ?: "(no answer submitted)"}")
             appendLine("  Canonical answer: ${card.canonicalAnswer}")
-            appendLine("  Score: ${card.score ?: 0}${card.effectiveScore?.let { if (it != card.score) " (learning $it)" else "" } ?: ""}")
+            appendLine("  Score: ${card.score ?: 0}/100${card.effectiveScore?.let { if (it != card.score) " (learning $it/100)" else "" } ?: ""}")
             appendLine("  App note: ${card.comment ?: "No comment"}")
         }
     }

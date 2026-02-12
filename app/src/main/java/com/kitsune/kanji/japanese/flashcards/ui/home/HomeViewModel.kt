@@ -25,6 +25,7 @@ data class HomeUiState(
     val startingPackId: String? = null,
     val trackTitle: String = "",
     val currentStreak: Int = 0,
+    val currentStreakScore: Int = 0,
     val bestStreak: Int = 0,
     val rankSummary: UserRankSummary = UserRankSummary(
         hiddenRating = 1000,
@@ -149,6 +150,7 @@ class HomeViewModel(
                         isLoading = false,
                         trackTitle = snapshot.trackTitle,
                         currentStreak = snapshot.currentStreak,
+                        currentStreakScore = snapshot.currentStreakScore,
                         bestStreak = snapshot.bestStreak,
                         rankSummary = snapshot.rankSummary,
                         hasStartedDailyChallenge = snapshot.hasStartedDailyChallenge,

@@ -23,10 +23,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WorkspacePremium
@@ -76,6 +77,8 @@ import java.time.LocalDate
 import kotlinx.coroutines.launch
 import androidx.compose.material3.rememberDrawerState
 
+private const val DECK_LEVEL_MAX_SCORE = 100
+
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -86,6 +89,7 @@ fun HomeScreen(
     onBrowseDecks: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenProfile: () -> Unit,
+    onOpenHistory: () -> Unit,
     onOpenUpgrade: () -> Unit
 ) {
     var showDailyPrompt by rememberSaveable { mutableStateOf(false) }
@@ -186,6 +190,16 @@ fun HomeScreen(
                     onClick = {
                         scope.launch { drawerState.close() }
                         onOpenProfile()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+                NavigationDrawerItem(
+                    label = { Text("Card History") },
+                    icon = { Icon(imageVector = Icons.Filled.History, contentDescription = null) },
+                    selected = false,
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onOpenHistory()
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
@@ -305,8 +319,8 @@ fun HomeScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             StreakPanel(
-                                label = "Best Streak",
-                                value = state.bestStreak.toString(),
+                                label = "Streak Score",
+                                value = state.currentStreakScore.toString(),
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -517,8 +531,8 @@ private fun PowerUpTray(
 private fun iconForPowerUp(powerUpId: String): ImageVector {
     return when (powerUpId) {
         PowerUpPreferences.POWER_UP_LUCKY_COIN -> Icons.Filled.Casino
-        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Lightbulb
-        PowerUpPreferences.POWER_UP_INSIGHT_LENS -> Icons.Filled.Visibility
+        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Visibility
+        PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> Icons.Filled.Pets
         else -> Icons.Filled.AutoFixHigh
     }
 }
@@ -761,7 +775,7 @@ private fun PackDeckCard(
                     )
                 } else {
                     Text(
-                        text = "Best ${pack.bestExamScore}",
+                        text = "Best ${pack.bestExamScore}/$DECK_LEVEL_MAX_SCORE",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
@@ -829,7 +843,10 @@ private fun FeaturedPackCard(
                 PackImagePlaceholder(status = pack.status, themeId = themeId, level = pack.level)
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Level ${pack.level}: ${pack.title}", fontWeight = FontWeight.SemiBold)
-                    Text("Best ${pack.bestExamScore}", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Best ${pack.bestExamScore}/$DECK_LEVEL_MAX_SCORE",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
             OutlinedButton(
