@@ -17,4 +17,4 @@ local.properties
 .gradle-local
 
 .gradle
-.kotlin/sessions
+.kotlin

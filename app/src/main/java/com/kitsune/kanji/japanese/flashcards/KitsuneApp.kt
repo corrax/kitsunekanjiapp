@@ -12,8 +12,8 @@ import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
 import com.kitsune.kanji.japanese.flashcards.data.notifications.DailyChallengeNotificationScheduler
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepositoryImpl
-import com.kitsune.kanji.japanese.flashcards.domain.ink.DeterministicHandwritingScorer
 import com.kitsune.kanji.japanese.flashcards.domain.ink.HandwritingScorer
+import com.kitsune.kanji.japanese.flashcards.domain.ink.MlKitHandwritingScorer
 
 class KitsuneApp : Application() {
     override fun onCreate() {
@@ -47,7 +47,7 @@ class AppContainer(application: Application) {
         onboardingPreferences = onboardingPreferences
     )
 
-    val handwritingScorer: HandwritingScorer = DeterministicHandwritingScorer()
+    val handwritingScorer: HandwritingScorer = MlKitHandwritingScorer()
     val billingPreferences: BillingPreferences = BillingPreferences(application)
     val billingManager: BillingManager = BillingManager(
         context = application,

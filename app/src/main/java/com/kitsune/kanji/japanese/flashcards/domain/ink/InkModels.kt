@@ -17,5 +17,6 @@ data class InkSample(
 
 data class HandwritingScore(
     val score: Int,
-    val feedback: String
+    val feedback: String,
+    val recognizedText: String? = null
 )

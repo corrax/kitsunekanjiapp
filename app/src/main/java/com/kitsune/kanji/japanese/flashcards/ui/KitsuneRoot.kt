@@ -398,6 +398,14 @@ private fun preferredDeckForSelection(selection: OnboardingSelection): Pair<Stri
             }
         }
 
-        EducationalGoal.JLPT_OR_CLASSES -> "jlpt_n5" to "jlpt_n5_core"
+        EducationalGoal.JLPT_OR_CLASSES -> when (selection.learnerLevel) {
+            LearnerLevel.BEGINNER_N5,
+            LearnerLevel.UNSURE -> "jlpt_n5" to "jlpt_n5_core"
+
+            LearnerLevel.BEGINNER_PLUS_N4 -> "jlpt_n4" to "jlpt_n4_core"
+
+            LearnerLevel.INTERMEDIATE_N3,
+            LearnerLevel.ADVANCED_N2 -> "jlpt_n3" to "jlpt_n3_core"
+        }
     }
 }

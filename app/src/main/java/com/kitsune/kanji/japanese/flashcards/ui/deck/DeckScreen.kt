@@ -100,6 +100,8 @@ import com.kitsune.kanji.japanese.flashcards.domain.ink.InkPoint
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkSample
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkStroke
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
@@ -144,6 +146,7 @@ fun DeckScreen(
         ?.takeIf { state.activeHintCardId == currentCard?.cardId }
     val isChoiceCard = currentCard?.choices?.isNotEmpty() == true &&
         currentCard.type in setOf(
+            CardType.KANJI_READING,
             CardType.VOCAB_READING,
             CardType.GRAMMAR_CHOICE,
             CardType.SENTENCE_COMPREHENSION
@@ -426,7 +429,7 @@ fun DeckScreen(
                         }
                         if (currentCard.isRetryQueued) {
                             Text(
-                                text = "Recycled practice card",
+                                text = "Focus review card",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = Color(0xFF8A4E2C),
                                 fontWeight = FontWeight.SemiBold
@@ -503,9 +506,9 @@ fun DeckScreen(
             state.latestMatchedAnswer?.let { matched ->
                 Text(
                     text = if (state.latestIsCanonical) {
-                        "Matched: $matched (canonical)"
+                        "Matched: $matched"
                     } else {
-                        "Matched accepted variant: $matched"
+                        "Matched accepted answer: $matched"
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -583,9 +586,9 @@ private data class ScoreBurstData(
 )
 
 private enum class ScoreBurstTier {
-    MISS,
+    INCORRECT,
+    ACCEPTABLE,
     GOOD,
-    GREAT,
     EXCELLENT
 }
 
@@ -595,7 +598,7 @@ private fun ScoreBurstOverlay(
     modifier: Modifier = Modifier
 ) {
     val tier = remember(burst.token) { scoreBurstTierFor(burst.effectiveScore) }
-    val popScale = remember(burst.token) { Animatable(if (tier == ScoreBurstTier.MISS) 1f else 0.45f) }
+    val popScale = remember(burst.token) { Animatable(if (tier == ScoreBurstTier.INCORRECT) 1f else 0.45f) }
     val popAlpha = remember(burst.token) { Animatable(0f) }
     val shakeOffset = remember(burst.token) { Animatable(0f) }
     val tilt = remember(burst.token) { Animatable(0f) }
@@ -603,7 +606,7 @@ private fun ScoreBurstOverlay(
     LaunchedEffect(burst.token) {
         popAlpha.animateTo(1f, animationSpec = tween(durationMillis = 130))
         when (tier) {
-            ScoreBurstTier.MISS -> {
+            ScoreBurstTier.INCORRECT -> {
                 repeat(4) {
                     shakeOffset.animateTo(14f, tween(durationMillis = 38))
                     shakeOffset.animateTo(-14f, tween(durationMillis = 38))
@@ -611,16 +614,16 @@ private fun ScoreBurstOverlay(
                 shakeOffset.animateTo(0f, tween(durationMillis = 38))
             }
 
-            ScoreBurstTier.GOOD -> {
+            ScoreBurstTier.ACCEPTABLE -> {
                 popScale.animateTo(
-                    targetValue = 1.03f,
+                    targetValue = 1.02f,
                     animationSpec = spring(dampingRatio = 0.66f, stiffness = 270f)
                 )
             }
 
-            ScoreBurstTier.GREAT -> {
+            ScoreBurstTier.GOOD -> {
                 popScale.animateTo(
-                    targetValue = 1.13f,
+                    targetValue = 1.12f,
                     animationSpec = spring(dampingRatio = 0.56f, stiffness = 220f)
                 )
                 tilt.animateTo(-6f, tween(100))
@@ -640,22 +643,22 @@ private fun ScoreBurstOverlay(
     }
 
     val headline = when (tier) {
-        ScoreBurstTier.MISS -> "Reinforce"
+        ScoreBurstTier.INCORRECT -> "Incorrect"
+        ScoreBurstTier.ACCEPTABLE -> "Acceptable"
         ScoreBurstTier.GOOD -> "Good"
-        ScoreBurstTier.GREAT -> "Great"
         ScoreBurstTier.EXCELLENT -> "Excellent"
     }
     val background = when (tier) {
-        ScoreBurstTier.MISS -> Color(0xFFE16957)
-        ScoreBurstTier.GOOD -> Color(0xFF219B5B)
-        ScoreBurstTier.GREAT -> Color(0xFF1A9A83)
-        ScoreBurstTier.EXCELLENT -> Color(0xFFF39C12)
+        ScoreBurstTier.INCORRECT -> Color(0xFFBF7A17)
+        ScoreBurstTier.ACCEPTABLE -> Color(0xFFD9B63A)
+        ScoreBurstTier.GOOD -> Color(0xFF85AA3F)
+        ScoreBurstTier.EXCELLENT -> Color(0xFF219B5B)
     }
     val border = when (tier) {
-        ScoreBurstTier.MISS -> Color(0xFF6F221A)
-        ScoreBurstTier.GOOD -> Color(0xFF0E5831)
-        ScoreBurstTier.GREAT -> Color(0xFF0C5448)
-        ScoreBurstTier.EXCELLENT -> Color(0xFF8C4D00)
+        ScoreBurstTier.INCORRECT -> Color(0xFF7A420A)
+        ScoreBurstTier.ACCEPTABLE -> Color(0xFF7D651A)
+        ScoreBurstTier.GOOD -> Color(0xFF546F1D)
+        ScoreBurstTier.EXCELLENT -> Color(0xFF0E5831)
     }
 
     Box(
@@ -663,7 +666,7 @@ private fun ScoreBurstOverlay(
         contentAlignment = Alignment.Center
     ) {
         AnimatedVisibility(
-            visible = tier == ScoreBurstTier.GREAT || tier == ScoreBurstTier.EXCELLENT,
+            visible = tier == ScoreBurstTier.GOOD || tier == ScoreBurstTier.EXCELLENT,
             enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.8f),
             exit = fadeOut(tween(180)) + scaleOut(targetScale = 1.15f)
         ) {
@@ -748,11 +751,11 @@ private fun CelebrationGlow(
 }
 
 private fun scoreBurstTierFor(score: Int): ScoreBurstTier {
-    return when {
-        score >= 95 -> ScoreBurstTier.EXCELLENT
-        score >= 85 -> ScoreBurstTier.GREAT
-        score >= 70 -> ScoreBurstTier.GOOD
-        else -> ScoreBurstTier.MISS
+    return when (scoreBandFor(score)) {
+        ScoreBand.EXCELLENT -> ScoreBurstTier.EXCELLENT
+        ScoreBand.GOOD -> ScoreBurstTier.GOOD
+        ScoreBand.ACCEPTABLE -> ScoreBurstTier.ACCEPTABLE
+        ScoreBand.INCORRECT -> ScoreBurstTier.INCORRECT
     }
 }
 
@@ -969,6 +972,7 @@ private fun GestureHelpOverlay(onDismiss: () -> Unit) {
 private fun promptLabelFor(type: CardType): String {
     return when (type) {
         CardType.KANJI_WRITE -> "English prompt"
+        CardType.KANJI_READING -> "Kanji reading"
         CardType.VOCAB_READING -> "Vocab check"
         CardType.GRAMMAR_CHOICE -> "Grammar choice"
         CardType.GRAMMAR_CLOZE_WRITE -> "Grammar cloze"
@@ -980,6 +984,7 @@ private fun promptLabelFor(type: CardType): String {
 private fun instructionFor(type: CardType): String {
     return when (type) {
         CardType.KANJI_WRITE -> "Write the matching kanji from memory."
+        CardType.KANJI_READING -> "Choose the correct reading for the kanji."
         CardType.VOCAB_READING -> "Pick the best answer."
         CardType.GRAMMAR_CHOICE -> "Choose the grammar pattern that fits."
         CardType.GRAMMAR_CLOZE_WRITE -> "Type the missing grammar form."
@@ -990,6 +995,7 @@ private fun instructionFor(type: CardType): String {
 
 private fun assistHintTextFor(card: com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard): String {
     return when (card.type) {
+        CardType.KANJI_READING,
         CardType.GRAMMAR_CHOICE,
         CardType.SENTENCE_COMPREHENSION,
         CardType.VOCAB_READING -> "Insight Lens armed: one distractor removed."

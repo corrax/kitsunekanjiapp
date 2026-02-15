@@ -1,5 +1,6 @@
 package com.kitsune.kanji.japanese.flashcards.ui.deck
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -16,7 +17,6 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -132,6 +132,11 @@ class DeckViewModel(
     ) {
         val runId = deckRunId ?: return
         val card = _uiState.value.currentCard ?: return
+        logDebug(
+            "submit.start runId=$runId cardId=${card.cardId} type=${card.type} " +
+                "strokes=${sample.strokes.size} points=${sample.totalPointCount()} " +
+                "typed=${typedAnswer?.take(24)} choice=$selectedChoice assists=${requestedAssists.joinToString(",")}"
+        )
         val currentVisibleIndex = _uiState.value.currentIndex
         val activeAssists = requestedAssists
             .distinct()
@@ -160,6 +165,11 @@ class DeckViewModel(
                     strokeCount = sample.strokes.size,
                     strokePathsRaw = encodeInkSample(sample),
                     feedback = bestCandidate.feedback
+                )
+                logDebug(
+                    "submit.payload cardId=${card.cardId} total=${submission.score} handwriting=${submission.handwritingScore} " +
+                        "knowledge=${submission.knowledgeScore} matched=${submission.matchedAnswer} canonical=${submission.canonicalAnswer} " +
+                        "isCanonical=${submission.isCanonicalMatch} strokeCount=${submission.strokeCount}"
                 )
                 repository.submitCard(deckRunId = runId, submission = submission)
                 val refreshed = repository.loadDeck(runId) ?: error("Deck not found")
@@ -191,6 +201,7 @@ class DeckViewModel(
                     )
                 }
             }.onFailure { error ->
+                logError("submit.failure cardId=${card.cardId} message=${error.message}", error)
                 _uiState.update {
                     it.copy(errorMessage = error.message ?: "Failed to submit card.")
                 }
@@ -265,6 +276,7 @@ class DeckViewModel(
     ): CandidateScore {
         return when (card.type) {
             CardType.KANJI_WRITE -> evaluateHandwriting(card = card, sample = sample)
+            CardType.KANJI_READING,
             CardType.GRAMMAR_CHOICE,
             CardType.SENTENCE_COMPREHENSION -> evaluateKnowledge(
                 card = card,
@@ -297,15 +309,25 @@ class DeckViewModel(
                     repository.loadTemplateForTarget(candidate)
                 } ?: return@mapNotNull null
                 val handwriting = handwritingScorer.score(sample, candidateTemplate)
-                scoreHandwritingCandidate(
+                logDebug(
+                    "handwriting.candidate cardId=${card.cardId} candidate=$candidate recognized=${handwriting.recognizedText} " +
+                        "score=${handwriting.score} feedback=${handwriting.feedback}"
+                )
+                scoreBinaryHandwritingCandidate(
+                    recognizedText = handwriting.recognizedText,
                     matchedAnswer = candidate,
                     canonicalAnswer = card.canonicalAnswer,
                     handwritingScore = handwriting.score,
                     baseFeedback = handwriting.feedback
                 )
             }
-        return candidateScores.maxByOrNull { it.totalScore }
+        val best = candidateScores.maxByOrNull { it.totalScore }
             ?: error("No scoring template available")
+        logDebug(
+            "handwriting.best cardId=${card.cardId} matched=${best.matchedAnswer} total=${best.totalScore} " +
+                "handwriting=${best.handwritingScore} canonical=${best.canonicalAnswer} isCanonical=${best.isCanonical}"
+        )
+        return best
     }
 
     private fun evaluateKnowledge(card: DeckCard, rawAnswer: String?): CandidateScore {
@@ -329,7 +351,7 @@ class DeckViewModel(
         val feedback = when {
             isCanonical -> "Exact match."
             isAccepted -> "Accepted variant. Canonical answer: ${card.canonicalAnswer}"
-            else -> "Needs reinforcement. Canonical answer: ${card.canonicalAnswer}"
+            else -> "Incorrect. Canonical answer: ${card.canonicalAnswer}"
         }
         return CandidateScore(
             matchedAnswer = userAnswer,
@@ -453,30 +475,48 @@ private data class CandidateScore(
     val feedback: String
 )
 
-private fun scoreHandwritingCandidate(
+private fun scoreBinaryHandwritingCandidate(
+    recognizedText: String?,
     matchedAnswer: String,
     canonicalAnswer: String,
     handwritingScore: Int,
     baseFeedback: String
 ): CandidateScore {
+    val normalizedHandwriting = handwritingScore.coerceIn(0, 100)
+    val isRecognizedMatch = normalizedHandwriting > 0
     val isCanonical = matchedAnswer == canonicalAnswer
-    val knowledgeScore = if (isCanonical) 100 else 82
-    val total = ((handwritingScore * HANDWRITING_SCORE_WEIGHT) + (knowledgeScore * KNOWLEDGE_SCORE_WEIGHT))
-        .roundToInt()
-        .coerceIn(0, 100)
-    val answerFeedback = if (isCanonical) {
-        "Canonical match."
-    } else {
-        "Accepted variant. JLPT canonical: $canonicalAnswer"
+    val knowledgeScore = when {
+        !isRecognizedMatch -> 0
+        isCanonical -> 100
+        else -> 90
+    }
+    val total = if (isRecognizedMatch) normalizedHandwriting else 0
+    val recognizedAnswer = recognizedText
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+    val answerFeedback = when {
+        !isRecognizedMatch && recognizedAnswer != null ->
+            "Recognized \"$recognizedAnswer\", which is not an accepted answer."
+        !isRecognizedMatch ->
+            "Could not recognize an accepted kanji."
+        isCanonical ->
+            "Accepted answer."
+        else ->
+            "Accepted alternate answer."
+    }
+    val storedAnswer = when {
+        isRecognizedMatch -> matchedAnswer
+        recognizedAnswer != null -> recognizedAnswer
+        else -> matchedAnswer
     }
     return CandidateScore(
-        matchedAnswer = matchedAnswer,
+        matchedAnswer = storedAnswer,
         canonicalAnswer = canonicalAnswer,
-        isCanonical = isCanonical,
-        handwritingScore = handwritingScore,
+        isCanonical = isCanonical && isRecognizedMatch,
+        handwritingScore = normalizedHandwriting,
         knowledgeScore = knowledgeScore,
         totalScore = total,
-        feedback = "$baseFeedback $answerFeedback"
+        feedback = "$baseFeedback $answerFeedback".trim()
     )
 }
 
@@ -586,6 +626,7 @@ private fun luckyHintFor(card: DeckCard): LuckyHintPayload {
         }
 
         CardType.GRAMMAR_CHOICE,
+        CardType.KANJI_READING,
         CardType.SENTENCE_COMPREHENSION,
         CardType.VOCAB_READING -> {
             val answer = card.canonicalAnswer
@@ -612,5 +653,21 @@ private fun encodeInkSample(sample: InkSample): String? {
     }.ifBlank { null }
 }
 
-private const val HANDWRITING_SCORE_WEIGHT = 0.90f
-private const val KNOWLEDGE_SCORE_WEIGHT = 0.10f
+private fun InkSample.totalPointCount(): Int {
+    return strokes.sumOf { it.points.size }
+}
+
+private fun logDebug(message: String) {
+    if (DECK_DEBUG_LOGS) {
+        Log.d(DECK_LOG_TAG, message)
+    }
+}
+
+private fun logError(message: String, throwable: Throwable) {
+    if (DECK_DEBUG_LOGS) {
+        Log.e(DECK_LOG_TAG, message, throwable)
+    }
+}
+
+private const val DECK_LOG_TAG = "KitsuneDeckScore"
+private const val DECK_DEBUG_LOGS = true

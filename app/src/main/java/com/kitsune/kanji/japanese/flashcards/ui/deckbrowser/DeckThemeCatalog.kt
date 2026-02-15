@@ -40,7 +40,7 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "JLPT",
         R.drawable.hero_summer,
-        contentTrackId = null,
+        contentTrackId = "jlpt_n4_core",
         levels = listOf(
             DeckLevelOption(1, "N4 Foundation"),
             DeckLevelOption(2, "Common Patterns"),
@@ -55,7 +55,7 @@ val deckThemeCatalog = listOf(
         "Intermediate",
         "JLPT",
         R.drawable.hero_autumn,
-        contentTrackId = null,
+        contentTrackId = "jlpt_n3_core",
         levels = listOf(
             DeckLevelOption(1, "Kanji Expansion"),
             DeckLevelOption(2, "Mixed Readings"),
@@ -70,7 +70,7 @@ val deckThemeCatalog = listOf(
         "Beginner",
         "Theme",
         R.drawable.pack_scene_city,
-        contentTrackId = null,
+        contentTrackId = "daily_life_core",
         levels = listOf(
             DeckLevelOption(1, "Home"),
             DeckLevelOption(2, "School"),
@@ -85,7 +85,7 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "Theme",
         R.drawable.pack_scene_food,
-        contentTrackId = null,
+        contentTrackId = "food_core",
         levels = listOf(
             DeckLevelOption(1, "Ingredients"),
             DeckLevelOption(2, "Ordering"),
@@ -100,7 +100,7 @@ val deckThemeCatalog = listOf(
         "Intermediate",
         "Theme",
         R.drawable.pack_scene_mountain,
-        contentTrackId = null,
+        contentTrackId = "transport_core",
         levels = listOf(
             DeckLevelOption(1, "Stations"),
             DeckLevelOption(2, "Tickets"),
@@ -115,7 +115,7 @@ val deckThemeCatalog = listOf(
         "Beginner+",
         "Theme",
         R.drawable.pack_scene_temple,
-        contentTrackId = null,
+        contentTrackId = "shopping_core",
         levels = listOf(
             DeckLevelOption(1, "Numbers"),
             DeckLevelOption(2, "Items"),

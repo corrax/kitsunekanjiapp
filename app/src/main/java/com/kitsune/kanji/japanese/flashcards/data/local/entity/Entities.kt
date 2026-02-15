@@ -5,6 +5,7 @@ import androidx.room.PrimaryKey
 
 enum class CardType {
     KANJI_WRITE,
+    KANJI_READING,
     VOCAB_READING,
     GRAMMAR_CHOICE,
     GRAMMAR_CLOZE_WRITE,

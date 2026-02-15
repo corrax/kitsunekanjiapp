@@ -122,7 +122,7 @@ interface KitsuneDao {
         ) latest
             ON latest.cardId = ca.cardId
            AND latest.latestAttempt = ca.createdAtEpochMillis
-        WHERE ca.scoreTotal < :retryBelowScore
+        WHERE ca.scoreEffective < :retryBelowScore
           AND p2.trackId = :trackId
         ORDER BY ca.createdAtEpochMillis DESC
         LIMIT :limit

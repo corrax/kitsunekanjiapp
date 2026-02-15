@@ -34,6 +34,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunCardReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
 import com.kitsune.kanji.japanese.flashcards.ui.common.GenkoyoshiInkPreview
+import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -160,11 +161,7 @@ private fun ReportSummaryCard(report: DeckRunReport) {
 @Composable
 private fun ReportCardItem(card: DeckRunCardReport) {
     val score = card.score ?: 0
-    val scoreColor = when {
-        score >= 90 -> Color(0xFF1E8D53)
-        score >= 70 -> Color(0xFFBF7A17)
-        else -> Color(0xFFD24A3D)
-    }
+    val visual = scoreVisualFor(score)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -173,12 +170,20 @@ private fun ReportCardItem(card: DeckRunCardReport) {
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        Text(
-            text = "#${card.position} ${card.prompt}",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF2F221A)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "#${card.position} ${card.prompt}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF2F221A),
+                modifier = Modifier.weight(1f)
+            )
+            ScoreStamp(label = visual.label, background = visual.stampBackground, textColor = visual.stampText)
+        }
         if (card.type == CardType.KANJI_WRITE) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -221,13 +226,30 @@ private fun ReportCardItem(card: DeckRunCardReport) {
                 }
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = scoreColor,
+            color = visual.toneColor,
             fontWeight = FontWeight.Medium
         )
         Text(
-            text = "App note: ${card.comment ?: "No comment"}",
+            text = "Comment: ${card.comment ?: "No comment"}",
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFF654D3D)
+        )
+    }
+}
+
+@Composable
+private fun ScoreStamp(label: String, background: Color, textColor: Color) {
+    Box(
+        modifier = Modifier
+            .border(1.dp, textColor.copy(alpha = 0.38f), RoundedCornerShape(999.dp))
+            .background(background, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = textColor,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }
@@ -254,7 +276,7 @@ private fun buildShareReportText(report: DeckRunReport): String {
             appendLine("  Your answer: ${card.userAnswer ?: "(no answer submitted)"}")
             appendLine("  Canonical answer: ${card.canonicalAnswer}")
             appendLine("  Score: ${card.score ?: 0}/100${card.effectiveScore?.let { if (it != card.score) " (learning $it/100)" else "" } ?: ""}")
-            appendLine("  App note: ${card.comment ?: "No comment"}")
+            appendLine("  Comment: ${card.comment ?: "No comment"}")
         }
     }
 }

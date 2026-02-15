@@ -9,11 +9,11 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 interface HandwritingScorer {
-    fun score(sample: InkSample, template: StrokeTemplate): HandwritingScore
+    suspend fun score(sample: InkSample, template: StrokeTemplate): HandwritingScore
 }
 
 class DeterministicHandwritingScorer : HandwritingScorer {
-    override fun score(sample: InkSample, template: StrokeTemplate): HandwritingScore {
+    override suspend fun score(sample: InkSample, template: StrokeTemplate): HandwritingScore {
         if (sample.strokes.isEmpty()) {
             return HandwritingScore(
                 score = 0,
@@ -74,20 +74,29 @@ class DeterministicHandwritingScorer : HandwritingScorer {
             templateCount = templateDescriptors.size
         )
         val traceScore = traceEfficiencyScore(inkDescriptors)
+        val intersectionScore = intersectionDensityScore(inkDescriptors)
+        val glyphDiffScore = glyphDiffScore(
+            ink = inkDescriptors,
+            template = templateDescriptors
+        )
 
         val rawScore = (
-            (geometryScore * 0.32f) +
-                (countScore * 0.15f) +
-                (orderScore * 0.08f) +
-                (flowScore * 0.12f) +
-                (straightnessScore * 0.13f) +
-                (coverageScore * 0.10f) +
-                (traceScore * 0.10f)
+            (geometryScore * 0.24f) +
+                (countScore * 0.12f) +
+                (orderScore * 0.07f) +
+                (flowScore * 0.11f) +
+                (straightnessScore * 0.10f) +
+                (coverageScore * 0.09f) +
+                (traceScore * 0.09f) +
+                (glyphDiffScore * 0.18f)
             )
         val antiScribbleCap = minOf(
-            if (coverageScore < 42f) 58 else 100,
-            if (traceScore < 38f) 56 else 100,
-            if (geometryScore < 34f) 54 else 100
+            if (coverageScore < 45f) 50 else 100,
+            if (traceScore < 42f) 48 else 100,
+            if (geometryScore < 38f) 50 else 100,
+            if (intersectionScore < 56f) 44 else 100,
+            if (glyphDiffScore < 38f && geometryScore < 60f) 42 else 100,
+            if (glyphDiffScore < 46f && coverageScore < 55f) 50 else 100
         )
         val normalizedScore = rawScore.roundToInt()
             .coerceAtMost(antiScribbleCap)
@@ -95,7 +104,10 @@ class DeterministicHandwritingScorer : HandwritingScorer {
         val weakestMatch = matchedStrokes.minByOrNull { it.shapeScore }
 
         val feedback = when {
-            coverageScore < 42f || traceScore < 38f -> "This looks more like a scribble than stroke structure. Slow down and draw distinct strokes."
+            coverageScore < 45f || traceScore < 42f || intersectionScore < 56f ->
+                "This looks more like a scribble than stroke structure. Slow down and draw distinct strokes."
+            glyphDiffScore < 45f && (geometryScore < 65f || coverageScore < 60f) ->
+                "The overall character form is off. Keep proportion and placement closer to the target kanji."
             countScore < 38f -> "Stroke count is quite different from the model. Focus on the main structure first."
             geometryScore < 40f -> {
                 val strokeNumber = (weakestMatch?.templateIndex ?: 0) + 1
@@ -393,6 +405,239 @@ class DeterministicHandwritingScorer : HandwritingScorer {
         return (((uniqueRatio - 0.12f) / 0.30f) * 100f).coerceIn(15f, 100f)
     }
 
+    private fun intersectionDensityScore(strokes: List<StrokeDescriptor>): Float {
+        if (strokes.isEmpty()) return 0f
+        val segments = mutableListOf<LineSegment>()
+        strokes.forEach { stroke ->
+            if (stroke.sampledPoints.size < 2) return@forEach
+            for (index in 1 until stroke.sampledPoints.size) {
+                segments += LineSegment(
+                    strokeIndex = stroke.index,
+                    segmentIndex = index - 1,
+                    start = stroke.sampledPoints[index - 1],
+                    end = stroke.sampledPoints[index]
+                )
+            }
+        }
+        if (segments.size < 2) return 100f
+
+        var comparisons = 0
+        var intersections = 0
+        for (left in 0 until segments.lastIndex) {
+            val a = segments[left]
+            for (right in (left + 1) until segments.size) {
+                val b = segments[right]
+                if (a.strokeIndex == b.strokeIndex && abs(a.segmentIndex - b.segmentIndex) <= 1) {
+                    continue
+                }
+                comparisons += 1
+                if (properIntersection(a.start, a.end, b.start, b.end)) {
+                    intersections += 1
+                }
+            }
+        }
+        if (comparisons <= 0) return 100f
+        val density = intersections.toFloat() / comparisons.toFloat()
+        return ((1f - (density / 0.22f)) * 100f).coerceIn(0f, 100f)
+    }
+
+    private fun glyphDiffScore(
+        ink: List<StrokeDescriptor>,
+        template: List<StrokeDescriptor>
+    ): Float {
+        if (ink.isEmpty() || template.isEmpty()) return 0f
+        val templateStrokes = template.map { it.sampledPoints }
+        val templatePoints = templateStrokes.flatten()
+        if (templatePoints.isEmpty()) return 0f
+        val templateCenter = centerOf(templatePoints)
+        var best = 0f
+        val scales = listOf(0.90f, 1.0f, 1.10f)
+        val shears = listOf(-0.08f, 0f, 0.08f)
+
+        for (scaleX in scales) {
+            for (scaleY in scales) {
+                for (shearX in shears) {
+                    val affineOnly = ink.map { stroke ->
+                        stroke.sampledPoints.map { point ->
+                            applyAffine(point, scaleX = scaleX, scaleY = scaleY, shearX = shearX)
+                        }
+                    }
+                    val affinePoints = affineOnly.flatten()
+                    if (affinePoints.isEmpty()) continue
+                    val affineCenter = centerOf(affinePoints)
+                    val translation = TemplatePoint(
+                        x = (templateCenter.x - affineCenter.x).coerceIn(-0.12f, 0.12f),
+                        y = (templateCenter.y - affineCenter.y).coerceIn(-0.12f, 0.12f)
+                    )
+                    val aligned = affineOnly.map { stroke ->
+                        stroke.map { point ->
+                            TemplatePoint(
+                                x = (point.x + translation.x).coerceIn(-0.2f, 1.2f),
+                                y = (point.y + translation.y).coerceIn(-0.2f, 1.2f)
+                            )
+                        }
+                    }
+                    val candidate = glyphSimilarity(
+                        inkStrokes = aligned,
+                        templateStrokes = templateStrokes
+                    )
+                    if (candidate > best) {
+                        best = candidate
+                    }
+                }
+            }
+        }
+        return best
+    }
+
+    private fun applyAffine(
+        point: TemplatePoint,
+        scaleX: Float,
+        scaleY: Float,
+        shearX: Float
+    ): TemplatePoint {
+        val centeredX = point.x - 0.5f
+        val centeredY = point.y - 0.5f
+        val shearedX = centeredX + (shearX * centeredY)
+        val scaledX = shearedX * scaleX
+        val scaledY = centeredY * scaleY
+        return TemplatePoint(
+            x = scaledX + 0.5f,
+            y = scaledY + 0.5f
+        )
+    }
+
+    private fun glyphSimilarity(
+        inkStrokes: List<List<TemplatePoint>>,
+        templateStrokes: List<List<TemplatePoint>>
+    ): Float {
+        val gridSize = 32
+        val inkMask = rasterizeMask(inkStrokes, gridSize)
+        val templateMask = rasterizeMask(templateStrokes, gridSize)
+        if (inkMask.isEmpty() || templateMask.isEmpty()) return 0f
+
+        val overlap = overlapCount(inkMask, templateMask).toFloat()
+        val precision = ((overlap / inkMask.size.toFloat()) * 100f).coerceIn(0f, 100f)
+        val recall = ((overlap / templateMask.size.toFloat()) * 100f).coerceIn(0f, 100f)
+        val dice = if (inkMask.isEmpty() && templateMask.isEmpty()) {
+            100f
+        } else {
+            ((2f * overlap) / (inkMask.size + templateMask.size).toFloat() * 100f).coerceIn(0f, 100f)
+        }
+        val chamferDistance = bidirectionalChamferDistance(
+            from = inkStrokes.flatten(),
+            to = templateStrokes.flatten()
+        )
+        val chamferScore = ((1f - (chamferDistance / 0.20f)) * 100f).coerceIn(0f, 100f)
+
+        return (precision * 0.46f) +
+            (recall * 0.20f) +
+            (dice * 0.20f) +
+            (chamferScore * 0.14f)
+    }
+
+    private fun rasterizeMask(
+        strokes: List<List<TemplatePoint>>,
+        gridSize: Int
+    ): Set<Int> {
+        if (gridSize < 2) return emptySet()
+        val cells = mutableSetOf<Int>()
+        strokes.forEach { stroke ->
+            if (stroke.isEmpty()) return@forEach
+            if (stroke.size == 1) {
+                addPointToMask(stroke.first(), gridSize, cells)
+                return@forEach
+            }
+            for (index in 1 until stroke.size) {
+                val start = stroke[index - 1]
+                val end = stroke[index]
+                val steps = (((max(abs(end.x - start.x), abs(end.y - start.y))) * gridSize * 2f).roundToInt())
+                    .coerceAtLeast(1)
+                for (step in 0..steps) {
+                    val t = step.toFloat() / steps.toFloat()
+                    val point = TemplatePoint(
+                        x = start.x + ((end.x - start.x) * t),
+                        y = start.y + ((end.y - start.y) * t)
+                    )
+                    addPointToMask(point, gridSize, cells)
+                }
+            }
+        }
+        return cells
+    }
+
+    private fun addPointToMask(point: TemplatePoint, gridSize: Int, cells: MutableSet<Int>) {
+        val x = (point.x.coerceIn(0f, 1f) * (gridSize - 1)).roundToInt().coerceIn(0, gridSize - 1)
+        val y = (point.y.coerceIn(0f, 1f) * (gridSize - 1)).roundToInt().coerceIn(0, gridSize - 1)
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                val nx = (x + dx).coerceIn(0, gridSize - 1)
+                val ny = (y + dy).coerceIn(0, gridSize - 1)
+                cells += (ny * gridSize) + nx
+            }
+        }
+    }
+
+    private fun overlapCount(first: Set<Int>, second: Set<Int>): Int {
+        if (first.isEmpty() || second.isEmpty()) return 0
+        val smaller = if (first.size <= second.size) first else second
+        val larger = if (first.size <= second.size) second else first
+        var overlap = 0
+        for (cell in smaller) {
+            if (cell in larger) {
+                overlap += 1
+            }
+        }
+        return overlap
+    }
+
+    private fun bidirectionalChamferDistance(
+        from: List<TemplatePoint>,
+        to: List<TemplatePoint>
+    ): Float {
+        if (from.isEmpty() || to.isEmpty()) return 1f
+        val forward = averageNearestDistance(from = from, to = to)
+        val backward = averageNearestDistance(from = to, to = from)
+        return (forward + backward) / 2f
+    }
+
+    private fun averageNearestDistance(
+        from: List<TemplatePoint>,
+        to: List<TemplatePoint>
+    ): Float {
+        if (from.isEmpty() || to.isEmpty()) return 1f
+        var total = 0f
+        for (point in from) {
+            var nearest = Float.MAX_VALUE
+            for (candidate in to) {
+                val distance = pointDistance(point, candidate)
+                if (distance < nearest) {
+                    nearest = distance
+                }
+            }
+            total += nearest
+        }
+        return total / from.size.toFloat()
+    }
+
+    private fun properIntersection(
+        aStart: TemplatePoint,
+        aEnd: TemplatePoint,
+        bStart: TemplatePoint,
+        bEnd: TemplatePoint
+    ): Boolean {
+        val o1 = orientation(aStart, aEnd, bStart)
+        val o2 = orientation(aStart, aEnd, bEnd)
+        val o3 = orientation(bStart, bEnd, aStart)
+        val o4 = orientation(bStart, bEnd, aEnd)
+        val strictCross = o1 * o2 < 0f && o3 * o4 < 0f
+        return strictCross
+    }
+
+    private fun orientation(a: TemplatePoint, b: TemplatePoint, c: TemplatePoint): Float {
+        return ((b.x - a.x) * (c.y - a.y)) - ((b.y - a.y) * (c.x - a.x))
+    }
+
     private fun straightnessSimilarity(
         inkStroke: List<TemplatePoint>,
         templateStroke: List<TemplatePoint>
@@ -444,5 +689,12 @@ class DeterministicHandwritingScorer : HandwritingScorer {
         val combinedScore: Float,
         val shapeScore: Float,
         val straightnessScore: Float
+    )
+
+    private data class LineSegment(
+        val strokeIndex: Int,
+        val segmentIndex: Int,
+        val start: TemplatePoint,
+        val end: TemplatePoint
     )
 }

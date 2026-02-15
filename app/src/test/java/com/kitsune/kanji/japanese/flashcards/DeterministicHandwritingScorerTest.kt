@@ -9,6 +9,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.TemplatePoint
 import com.kitsune.kanji.japanese.flashcards.domain.model.TemplateStroke
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlinx.coroutines.test.runTest
 
 class DeterministicHandwritingScorerTest {
     private val scorer = DeterministicHandwritingScorer()
@@ -26,13 +27,13 @@ class DeterministicHandwritingScorerTest {
     )
 
     @Test
-    fun score_emptyInk_returnsZero() {
+    fun score_emptyInk_returnsZero() = runTest {
         val result = scorer.score(InkSample(emptyList()), template)
         assertTrue(result.score == 0)
     }
 
     @Test
-    fun score_balancedInk_returnsPassingScore() {
+    fun score_balancedInk_returnsPassingScore() = runTest {
         val sample = InkSample(
             strokes = listOf(
                 stroke(20f, 20f, 20f, 200f),
@@ -47,7 +48,7 @@ class DeterministicHandwritingScorerTest {
     }
 
     @Test
-    fun score_mismatchedGeometry_isLower() {
+    fun score_mismatchedGeometry_isLower() = runTest {
         val goodSample = InkSample(
             strokes = listOf(
                 stroke(20f, 20f, 20f, 200f),
@@ -71,7 +72,7 @@ class DeterministicHandwritingScorerTest {
     }
 
     @Test
-    fun score_fragmentedButStructuredInk_isStillFair() {
+    fun score_fragmentedButStructuredInk_isStillFair() = runTest {
         val fragmentedSample = InkSample(
             strokes = listOf(
                 stroke(20f, 20f, 20f, 110f),
@@ -90,7 +91,22 @@ class DeterministicHandwritingScorerTest {
     }
 
     @Test
-    fun score_extremeMismatch_remainsLowerThanBalanced() {
+    fun score_affineSkewedButSameForm_staysPassable() = runTest {
+        val skewedSample = InkSample(
+            strokes = listOf(
+                stroke(30f, 22f, 48f, 205f),
+                stroke(30f, 22f, 192f, 32f),
+                stroke(176f, 28f, 194f, 210f),
+                stroke(42f, 198f, 206f, 210f)
+            )
+        )
+
+        val result = scorer.score(skewedSample, template)
+        assertTrue("skewed score=${result.score}", result.score >= 62)
+    }
+
+    @Test
+    fun score_wrongGlyphShape_isPenalized() = runTest {
         val balancedSample = InkSample(
             strokes = listOf(
                 stroke(20f, 20f, 20f, 200f),
@@ -99,25 +115,31 @@ class DeterministicHandwritingScorerTest {
                 stroke(20f, 200f, 180f, 200f)
             )
         )
-        val extremeSample = InkSample(
+        val wrongGlyphSample = InkSample(
             strokes = listOf(
-                stroke(20f, 100f, 180f, 100f),
-                stroke(50f, 40f, 150f, 160f),
-                stroke(150f, 40f, 50f, 160f),
-                stroke(30f, 30f, 30f, 180f),
-                stroke(170f, 30f, 170f, 180f),
-                stroke(20f, 20f, 180f, 180f),
-                stroke(180f, 20f, 20f, 180f)
+                stroke(30f, 30f, 170f, 170f),
+                stroke(170f, 30f, 30f, 170f),
+                stroke(100f, 20f, 100f, 200f),
+                stroke(20f, 100f, 180f, 100f)
             )
         )
 
         val balanced = scorer.score(balancedSample, template).score
-        val extreme = scorer.score(extremeSample, template).score
-        assertTrue(balanced >= extreme + 10)
+        val wrong = scorer.score(wrongGlyphSample, template).score
+        assertTrue("wrong score=$wrong balanced=$balanced", wrong <= 58)
+        assertTrue("wrong score=$wrong balanced=$balanced", balanced >= wrong + 12)
     }
 
     @Test
-    fun score_denseScribble_isRejectedAsLow() {
+    fun score_denseScribble_isRejectedAsLow() = runTest {
+        val balancedSample = InkSample(
+            strokes = listOf(
+                stroke(20f, 20f, 20f, 200f),
+                stroke(20f, 20f, 180f, 20f),
+                stroke(180f, 20f, 180f, 200f),
+                stroke(20f, 200f, 180f, 200f)
+            )
+        )
         val scribble = InkSample(
             canvasWidth = 280f,
             canvasHeight = 280f,
@@ -133,8 +155,10 @@ class DeterministicHandwritingScorerTest {
             )
         )
 
-        val result = scorer.score(scribble, template)
-        assertTrue(result.score <= 50)
+        val balanced = scorer.score(balancedSample, template).score
+        val scribbleScore = scorer.score(scribble, template).score
+        assertTrue("scribble score=$scribbleScore", scribbleScore <= 60)
+        assertTrue("scribble score=$scribbleScore balanced=$balanced", balanced >= scribbleScore + 12)
     }
 
     private fun stroke(x1: Float, y1: Float, x2: Float, y2: Float): InkStroke {

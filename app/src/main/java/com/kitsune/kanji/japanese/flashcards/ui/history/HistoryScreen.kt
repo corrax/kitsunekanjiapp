@@ -30,9 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.requiresReinforcement
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.KanjiAttemptHistoryItem
 import com.kitsune.kanji.japanese.flashcards.ui.common.GenkoyoshiInkPreview
+import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -160,7 +162,8 @@ private fun HistoryCard(
     onOpenRunReport: () -> Unit,
     onRetest: () -> Unit
 ) {
-    val weakScore = item.scoreEffective < WEAK_SCORE_THRESHOLD
+    val weakScore = requiresReinforcement(item.scoreEffective)
+    val visual = scoreVisualFor(item.scoreTotal)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -180,12 +183,24 @@ private fun HistoryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "${item.canonicalAnswer} - ${item.prompt}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF2B2018)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${item.canonicalAnswer} - ${item.prompt}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF2B2018),
+                        modifier = Modifier.weight(1f)
+                    )
+                    ScoreStamp(
+                        label = visual.label,
+                        background = visual.stampBackground,
+                        textColor = visual.stampText
+                    )
+                }
                 Text(
                     text = "Your answer: ${item.userAnswer}",
                     style = MaterialTheme.typography.bodySmall,
@@ -199,7 +214,7 @@ private fun HistoryCard(
                 Text(
                     text = scoreLabel(item),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = scoreColor(item.scoreTotal),
+                    color = visual.toneColor,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
@@ -234,6 +249,7 @@ private fun ReportHistoryCard(
     report: DeckRunHistoryItem,
     onOpenRunReport: () -> Unit
 ) {
+    val visual = scoreVisualFor(report.totalScore)
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -252,12 +268,24 @@ private fun ReportHistoryCard(
             style = MaterialTheme.typography.labelLarge,
             color = Color(0xFF7A5A47)
         )
-        Text(
-            text = "Score ${report.totalScore} (${report.grade})",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color(0xFF2B2018)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Score ${report.totalScore} (${report.grade})",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = visual.toneColor,
+                modifier = Modifier.weight(1f)
+            )
+            ScoreStamp(
+                label = visual.label,
+                background = visual.stampBackground,
+                textColor = visual.stampText
+            )
+        }
         Text(
             text = "Reviewed ${report.cardsReviewed}/${report.totalCards}",
             style = MaterialTheme.typography.bodySmall,
@@ -269,19 +297,27 @@ private fun ReportHistoryCard(
     }
 }
 
+@Composable
+private fun ScoreStamp(label: String, background: Color, textColor: Color) {
+    Box(
+        modifier = Modifier
+            .background(background, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = textColor,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
 private fun scoreLabel(item: KanjiAttemptHistoryItem): String {
     return if (item.scoreTotal == item.scoreEffective) {
         "Score: ${item.scoreTotal}/100"
     } else {
         "Score: ${item.scoreTotal}/100 (learning ${item.scoreEffective}/100)"
-    }
-}
-
-private fun scoreColor(score: Int): Color {
-    return when {
-        score >= 90 -> Color(0xFF217A49)
-        score >= 70 -> Color(0xFF9B6517)
-        else -> Color(0xFFB5443A)
     }
 }
 
@@ -291,5 +327,3 @@ private fun formatAttemptDate(epochMillis: Long): String {
         .toLocalDateTime()
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
 }
-
-private const val WEAK_SCORE_THRESHOLD = 75

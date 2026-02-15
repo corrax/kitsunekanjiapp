@@ -185,6 +185,9 @@ object N5SeedContent {
         displayOrder: Int,
         packs: List<ScenarioPack>
     ): TrackSeed {
+        val enrichedPacks = packs.map { pack ->
+            withScenarioKanjiReadingCard(trackId = trackId, pack = pack)
+        }
         val track = TrackEntity(
             trackId = trackId,
             title = title,
@@ -193,7 +196,7 @@ object N5SeedContent {
             displayOrder = displayOrder
         )
 
-        val packEntities = packs.map { pack ->
+        val packEntities = enrichedPacks.map { pack ->
             PackEntity(
                 packId = packId(trackId, pack.level),
                 trackId = trackId,
@@ -206,8 +209,8 @@ object N5SeedContent {
             )
         }
 
-        val cards = packs.flatMap { it.cards }
-        val packCards = packs.flatMap { pack ->
+        val cards = enrichedPacks.flatMap { it.cards }
+        val packCards = enrichedPacks.flatMap { pack ->
             pack.cards.mapIndexed { index, card ->
                 PackCardCrossRef(
                     packId = packId(trackId, pack.level),
@@ -271,6 +274,48 @@ object N5SeedContent {
                 difficulty = level,
                 templateId = "tmpl_$cardId"
             )
+        }
+    }
+
+    private fun withScenarioKanjiReadingCard(trackId: String, pack: ScenarioPack): ScenarioPack {
+        val vocabulary = pack.cards.filter { card ->
+            card.type == CardType.VOCAB_READING &&
+                !card.reading.isNullOrBlank() &&
+                containsKanji(card.prompt)
+        }
+        if (vocabulary.isEmpty()) return pack
+        val source = vocabulary.first()
+        val answer = source.reading.orEmpty().trim()
+        if (answer.isBlank()) return pack
+        val pool = (
+            vocabulary.mapNotNull { it.reading?.trim() } +
+                listOf("desu", "masu", "ka", "ni")
+            )
+            .filter { it.isNotBlank() }
+            .distinct()
+        val seed = (trackId.hashCode() xor pack.level).coerceAtLeast(1)
+        val choices = (pool.shuffled(Random(seed)).take(3) + answer)
+            .distinct()
+            .shuffled(Random(seed xor 0x4D95A1F))
+        val readingCard = CardEntity(
+            cardId = "${trackId}_r_${pack.level}_1",
+            type = CardType.KANJI_READING,
+            prompt = source.prompt,
+            canonicalAnswer = answer,
+            acceptedAnswersRaw = listOf(answer, answer.lowercase(Locale.US)).distinct().joinToString("|"),
+            reading = answer,
+            meaning = "kanji reading",
+            promptFurigana = source.promptFurigana,
+            choicesRaw = choices.joinToString("|"),
+            difficulty = pack.level,
+            templateId = "tmpl_${trackId}_r_${pack.level}_1"
+        )
+        return pack.copy(cards = pack.cards + readingCard)
+    }
+
+    private fun containsKanji(text: String): Boolean {
+        return text.any { character ->
+            Character.UnicodeScript.of(character.code) == Character.UnicodeScript.HAN
         }
     }
 
@@ -2145,6 +2190,23 @@ object N5SeedContent {
                 )
             ),
             SupplementalCardSeed(
+                packLevel = 1,
+                positionOffset = 2,
+                card = CardEntity(
+                    cardId = "n5_extra_reading_01",
+                    type = CardType.KANJI_READING,
+                    prompt = "\u65e5",
+                    canonicalAnswer = "nichi",
+                    acceptedAnswersRaw = "nichi|jitsu",
+                    reading = "nichi",
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = "nichi|jitsu|getsu|mizu",
+                    difficulty = 1,
+                    templateId = "tmpl_n5_extra_reading_01"
+                )
+            ),
+            SupplementalCardSeed(
                 packLevel = 2,
                 positionOffset = 1,
                 card = CardEntity(
@@ -2159,6 +2221,23 @@ object N5SeedContent {
                     choicesRaw = "ながら|ので|だけ|でも",
                     difficulty = 2,
                     templateId = "tmpl_n5_extra_grammar_01"
+                )
+            ),
+            SupplementalCardSeed(
+                packLevel = 2,
+                positionOffset = 2,
+                card = CardEntity(
+                    cardId = "n5_extra_reading_02",
+                    type = CardType.KANJI_READING,
+                    prompt = "\u6708",
+                    canonicalAnswer = "getsu",
+                    acceptedAnswersRaw = "getsu|gatsu",
+                    reading = "getsu",
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = "getsu|gatsu|nichi|sui",
+                    difficulty = 2,
+                    templateId = "tmpl_n5_extra_reading_02"
                 )
             ),
             SupplementalCardSeed(
@@ -2179,6 +2258,23 @@ object N5SeedContent {
                 )
             ),
             SupplementalCardSeed(
+                packLevel = 3,
+                positionOffset = 2,
+                card = CardEntity(
+                    cardId = "n5_extra_reading_03",
+                    type = CardType.KANJI_READING,
+                    prompt = "\u5b66",
+                    canonicalAnswer = "gaku",
+                    acceptedAnswersRaw = "gaku|manabu",
+                    reading = "gaku",
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = "gaku|manabu|kou|sho",
+                    difficulty = 3,
+                    templateId = "tmpl_n5_extra_reading_03"
+                )
+            ),
+            SupplementalCardSeed(
                 packLevel = 4,
                 positionOffset = 1,
                 card = CardEntity(
@@ -2196,6 +2292,23 @@ object N5SeedContent {
                 )
             ),
             SupplementalCardSeed(
+                packLevel = 4,
+                positionOffset = 2,
+                card = CardEntity(
+                    cardId = "n5_extra_reading_04",
+                    type = CardType.KANJI_READING,
+                    prompt = "\u751f",
+                    canonicalAnswer = "sei",
+                    acceptedAnswersRaw = "sei|shou|ikiru",
+                    reading = "sei",
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = "sei|shou|jitsu|kaku",
+                    difficulty = 4,
+                    templateId = "tmpl_n5_extra_reading_04"
+                )
+            ),
+            SupplementalCardSeed(
                 packLevel = 5,
                 positionOffset = 1,
                 card = CardEntity(
@@ -2210,6 +2323,23 @@ object N5SeedContent {
                     choicesRaw = null,
                     difficulty = 5,
                     templateId = "tmpl_n5_extra_grammar_02"
+                )
+            ),
+            SupplementalCardSeed(
+                packLevel = 5,
+                positionOffset = 2,
+                card = CardEntity(
+                    cardId = "n5_extra_reading_05",
+                    type = CardType.KANJI_READING,
+                    prompt = "\u6821",
+                    canonicalAnswer = "kou",
+                    acceptedAnswersRaw = "kou",
+                    reading = "kou",
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = "kou|gaku|sei|mon",
+                    difficulty = 5,
+                    templateId = "tmpl_n5_extra_reading_05"
                 )
             ),
             SupplementalCardSeed(

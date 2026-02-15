@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.google.billing.ktx)
+    implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
 
     ksp(libs.androidx.room.compiler)
 
