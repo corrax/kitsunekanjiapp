@@ -27,8 +27,8 @@ fun scoreVisualFor(score: Int): ScoreVisual {
             stampText = Color(0xFF4E6A1C)
         )
 
-        ScoreBand.ACCEPTABLE -> ScoreVisual(
-            label = "Acceptable",
+        ScoreBand.OK -> ScoreVisual(
+            label = "Ok",
             toneColor = Color(0xFFB79A1E),
             stampBackground = Color(0xFFF9F2D9),
             stampText = Color(0xFF7D6614)

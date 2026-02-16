@@ -162,7 +162,7 @@ private fun HistoryCard(
     onOpenRunReport: () -> Unit,
     onRetest: () -> Unit
 ) {
-    val weakScore = requiresReinforcement(item.scoreEffective)
+    val weakScore = requiresReinforcement(item.scoreTotal)
     val visual = scoreVisualFor(item.scoreTotal)
     Column(
         modifier = Modifier
@@ -217,6 +217,14 @@ private fun HistoryCard(
                     color = visual.toneColor,
                     fontWeight = FontWeight.Medium
                 )
+                if (item.assistCount > 0) {
+                    Text(
+                        text = "Assist used x${item.assistCount}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8A4E2C),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
                 Text(
                     text = "Attempted: ${formatAttemptDate(item.attemptedAtEpochMillis)}",
                     style = MaterialTheme.typography.bodySmall,
@@ -314,11 +322,7 @@ private fun ScoreStamp(label: String, background: Color, textColor: Color) {
 }
 
 private fun scoreLabel(item: KanjiAttemptHistoryItem): String {
-    return if (item.scoreTotal == item.scoreEffective) {
-        "Score: ${item.scoreTotal}/100"
-    } else {
-        "Score: ${item.scoreTotal}/100 (learning ${item.scoreEffective}/100)"
-    }
+    return "Score: ${item.scoreTotal}/100"
 }
 
 private fun formatAttemptDate(epochMillis: Long): String {

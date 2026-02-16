@@ -307,7 +307,7 @@ private fun PlansSlide(
         )
 
         ValueBullet("Adaptive daily deck (15-18 cards) to keep session time predictable.")
-        ValueBullet("Dynamic reranking and reinforcement on weak or assisted answers.")
+        ValueBullet("Every card supports optional assist; assisted answers are capped and recycled in daily reinforcement.")
         ValueBullet("Vocab, grammar, and sentence training linked by shared examples.")
 
         Spacer(modifier = Modifier.height(4.dp))

@@ -422,7 +422,12 @@ object N5SeedContent {
         meaning: String
     ): CardEntity {
         val cardId = "${trackId}_b_${level}_${index + 1}"
-        val acceptedRaw = (accepted + answer).distinct().joinToString("|")
+        val romajiAccepted = SENTENCE_BUILD_ROMAJI_BY_ANSWER[answer].orEmpty()
+        val kanaAccepted = romajiAccepted
+            .map(::romanizedToHiragana)
+            .filter { it.isNotBlank() }
+        val acceptedRaw = (accepted + answer + romajiAccepted + kanaAccepted).distinct().joinToString("|")
+        val primaryKana = kanaAccepted.firstOrNull()
         return CardEntity(
             cardId = cardId,
             type = CardType.SENTENCE_BUILD,
@@ -431,7 +436,7 @@ object N5SeedContent {
             acceptedAnswersRaw = acceptedRaw,
             reading = null,
             meaning = meaning,
-            promptFurigana = null,
+            promptFurigana = primaryKana?.let { "$answer{$it}" },
             choicesRaw = null,
             difficulty = level,
             templateId = "tmpl_$cardId"
@@ -2350,7 +2355,7 @@ object N5SeedContent {
                     type = CardType.SENTENCE_BUILD,
                     prompt = "Use つもり with 行く and 明日",
                     canonicalAnswer = "明日行くつもりです",
-                    acceptedAnswersRaw = "明日行くつもりです|明日、行くつもりです",
+                    acceptedAnswersRaw = "明日行くつもりです|明日、行くつもりです|ashita iku tsumori desu|あしたいくつもりです",
                     reading = null,
                     meaning = "intend to ...",
                     promptFurigana = "明日{あした}行{い}くつもりです",
@@ -2401,7 +2406,7 @@ object N5SeedContent {
                     type = CardType.SENTENCE_BUILD,
                     prompt = "Use ないで with 飲む and 寝る",
                     canonicalAnswer = "薬を飲まないで寝ました",
-                    acceptedAnswersRaw = "薬を飲まないで寝ました|薬を飲まないで寝た",
+                    acceptedAnswersRaw = "薬を飲まないで寝ました|薬を飲まないで寝た|kusuri o nomanai de nemashita|kusuri o nomanai de neta|くすりをのまないでねました|くすりをのまないでねた",
                     reading = null,
                     meaning = "without doing ...",
                     promptFurigana = "薬{くすり}を飲{の}まないで寝{ね}ました",
@@ -2452,7 +2457,7 @@ object N5SeedContent {
                     type = CardType.SENTENCE_BUILD,
                     prompt = "Build a sentence with 〜ように and 忘れない",
                     canonicalAnswer = "忘れないようにメモします",
-                    acceptedAnswersRaw = "忘れないようにメモします",
+                    acceptedAnswersRaw = "忘れないようにメモします|wasurenai you ni memo shimasu|わすれないようにめもします",
                     reading = null,
                     meaning = "so that ...",
                     promptFurigana = "忘{わす}れないようにメモします",
@@ -2528,6 +2533,114 @@ object N5SeedContent {
         }
         return points.joinToString(separator = ";")
     }
+
+    private fun romanizedToHiragana(romaji: String): String {
+        val normalized = romaji
+            .lowercase(Locale.US)
+            .replace("-", "")
+            .replace(" ", "")
+        if (normalized.isBlank()) return ""
+        val result = StringBuilder()
+        var index = 0
+        while (index < normalized.length) {
+            val current = normalized[index]
+            val next = normalized.getOrNull(index + 1)
+
+            if (
+                next != null &&
+                current == next &&
+                current in "bcdfghjklmpqrstvwxyz" &&
+                current != 'n'
+            ) {
+                result.append('っ')
+                index += 1
+                continue
+            }
+
+            if (current == 'n') {
+                if (next == null) {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+                if (next == '\'') {
+                    result.append('ん')
+                    index += 2
+                    continue
+                }
+                if (next == 'n') {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+                if (next !in "aeiouy") {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+            }
+
+            val kanaEntry = ROMAJI_TO_HIRAGANA.firstOrNull { (latin, _) ->
+                normalized.startsWith(latin, startIndex = index)
+            }
+            if (kanaEntry != null) {
+                result.append(kanaEntry.second)
+                index += kanaEntry.first.length
+            } else {
+                result.append(current)
+                index += 1
+            }
+        }
+        return result.toString()
+    }
+
+    private val SENTENCE_BUILD_ROMAJI_BY_ANSWER = mapOf(
+        "私は学生です" to listOf("watashi wa gakusei desu"),
+        "今日宿題を提出します" to listOf("kyou shukudai o teishutsu shimasu"),
+        "明日学校に行かなければなりません" to listOf("ashita gakkou ni ikanakereba narimasen"),
+        "音楽を聞きながら勉強します" to listOf("ongaku o kikinagara benkyou shimasu"),
+        "わからないときは質問してください" to listOf("wakaranai toki wa shitsumon shite kudasai"),
+        "すみません、もう一度言っていただけませんか" to listOf("sumimasen mou ichido itte itadakemasen ka"),
+        "私は会社で働きます" to listOf("watashi wa kaisha de hatarakimasu"),
+        "詳細を確認してください" to listOf("shousai o kakunin shite kudasai"),
+        "メールを送っていただけませんか" to listOf("meeru o okutte itadakemasen ka"),
+        "明日までに終わらせます" to listOf("ashita made ni owarasemasu"),
+        "私の名前はたんじです" to listOf("watashi no namae wa tanji desu"),
+        "トイレはどこですか" to listOf("toire wa doko desu ka"),
+        "明日会いましょう" to listOf("ashita aimashou"),
+        "日本語が少し話せます" to listOf("nihongo ga sukoshi hanasemasu"),
+        "大丈夫だと思います" to listOf("daijoubu da to omoimasu")
+    )
+
+    private val ROMAJI_TO_HIRAGANA = listOf(
+        "kya" to "きゃ", "kyu" to "きゅ", "kyo" to "きょ",
+        "sha" to "しゃ", "shu" to "しゅ", "sho" to "しょ",
+        "cha" to "ちゃ", "chu" to "ちゅ", "cho" to "ちょ",
+        "nya" to "にゃ", "nyu" to "にゅ", "nyo" to "にょ",
+        "hya" to "ひゃ", "hyu" to "ひゅ", "hyo" to "ひょ",
+        "mya" to "みゃ", "myu" to "みゅ", "myo" to "みょ",
+        "rya" to "りゃ", "ryu" to "りゅ", "ryo" to "りょ",
+        "gya" to "ぎゃ", "gyu" to "ぎゅ", "gyo" to "ぎょ",
+        "bya" to "びゃ", "byu" to "びゅ", "byo" to "びょ",
+        "pya" to "ぴゃ", "pyu" to "ぴゅ", "pyo" to "ぴょ",
+        "ja" to "じゃ", "ju" to "じゅ", "jo" to "じょ",
+        "shi" to "し", "chi" to "ち", "tsu" to "つ", "fu" to "ふ",
+        "ka" to "か", "ki" to "き", "ku" to "く", "ke" to "け", "ko" to "こ",
+        "sa" to "さ", "su" to "す", "se" to "せ", "so" to "そ",
+        "ta" to "た", "te" to "て", "to" to "と",
+        "na" to "な", "ni" to "に", "nu" to "ぬ", "ne" to "ね", "no" to "の",
+        "ha" to "は", "hi" to "ひ", "he" to "へ", "ho" to "ほ",
+        "ma" to "ま", "mi" to "み", "mu" to "む", "me" to "め", "mo" to "も",
+        "ya" to "や", "yu" to "ゆ", "yo" to "よ",
+        "ra" to "ら", "ri" to "り", "ru" to "る", "re" to "れ", "ro" to "ろ",
+        "wa" to "わ", "wo" to "を",
+        "ga" to "が", "gi" to "ぎ", "gu" to "ぐ", "ge" to "げ", "go" to "ご",
+        "za" to "ざ", "ji" to "じ", "zu" to "ず", "ze" to "ぜ", "zo" to "ぞ",
+        "da" to "だ", "de" to "で", "do" to "ど",
+        "ba" to "ば", "bi" to "び", "bu" to "ぶ", "be" to "べ", "bo" to "ぼ",
+        "pa" to "ぱ", "pi" to "ぴ", "pu" to "ぷ", "pe" to "ぺ", "po" to "ぽ",
+        "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お"
+    )
 
     private val strokeOverrides = mapOf(
         "一" to 1,

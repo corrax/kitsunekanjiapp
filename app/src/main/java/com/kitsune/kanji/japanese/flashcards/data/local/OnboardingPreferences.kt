@@ -80,10 +80,23 @@ class OnboardingPreferences(private val context: Context) {
         }
     }
 
+    suspend fun shouldShowDeckHowToPlay(): Boolean {
+        return context.userPrefsDataStore.data
+            .map { prefs -> !(prefs[KEY_DECK_HOW_TO_PLAY_DISMISSED] ?: false) }
+            .first()
+    }
+
+    suspend fun setDeckHowToPlayDismissed(dismissed: Boolean) {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[KEY_DECK_HOW_TO_PLAY_DISMISSED] = dismissed
+        }
+    }
+
     companion object {
         private val KEY_ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val KEY_LEARNER_LEVEL = stringPreferencesKey("learner_level")
         private val KEY_EDUCATIONAL_GOAL = stringPreferencesKey("educational_goal")
         private val KEY_PLACEMENT_APPLIED = booleanPreferencesKey("placement_applied")
+        private val KEY_DECK_HOW_TO_PLAY_DISMISSED = booleanPreferencesKey("deck_how_to_play_dismissed")
     }
 }

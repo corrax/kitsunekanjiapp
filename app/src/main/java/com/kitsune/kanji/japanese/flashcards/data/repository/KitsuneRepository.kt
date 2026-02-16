@@ -15,7 +15,6 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunCardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckRunEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
-import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.SrsStateEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.StreakStateEntity
@@ -33,13 +32,16 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
 import com.kitsune.kanji.japanese.flashcards.domain.model.KanjiAttemptHistoryItem
+import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
-import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import com.kitsune.kanji.japanese.flashcards.domain.model.StrokeTemplate
 import com.kitsune.kanji.japanese.flashcards.domain.model.TemplatePoint
 import com.kitsune.kanji.japanese.flashcards.domain.model.TemplateStroke
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.SCORE_REINFORCEMENT_CUTOFF
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.applyAssistPenalty
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
 import com.kitsune.kanji.japanese.flashcards.domain.time.DailyChallengeClock
 import java.time.Instant
 import java.time.LocalDate
@@ -53,14 +55,12 @@ import kotlin.random.Random
 interface KitsuneRepository {
     suspend fun initialize()
     suspend fun getHomeSnapshot(trackId: String): HomeSnapshot
-    suspend fun getPowerUps(): List<PowerUpInventory>
     suspend fun dismissDailyReminder()
     suspend fun createOrLoadDailyDeck(trackId: String): DeckSession
     suspend fun createOrLoadExamDeck(packId: String): DeckSession
     suspend fun loadDeck(deckRunId: String): DeckSession?
     suspend fun loadTemplate(templateId: String): StrokeTemplate?
     suspend fun loadTemplateForTarget(target: String): StrokeTemplate?
-    suspend fun consumePowerUp(id: String): Boolean
     suspend fun reorderDeckCards(deckRunId: String, cardIdsInOrder: List<String>)
     suspend fun submitCard(deckRunId: String, submission: CardSubmission)
     suspend fun submitDeck(deckRunId: String): DeckResult?
@@ -78,7 +78,6 @@ class KitsuneRepositoryImpl(
     private val onboardingPreferences: OnboardingPreferences
 ) : KitsuneRepository {
     override suspend fun initialize() {
-        powerUpPreferences.ensureStarterBundle()
         val seed = mergeSeedBundles(
             primary = N5SeedContent.build(),
             secondary = GoalAlignedSeedContent.build()
@@ -130,10 +129,19 @@ class KitsuneRepositoryImpl(
             ?: dao.getTracks().first()
         val packs = dao.getPacks(track.trackId)
         val progressMap = dao.getPackProgress(packs.map { it.packId }).associateBy { it.packId }
+        val dailySource = dailySourceId(track.trackId, today)
         val hasStartedDailyChallenge = dao.getDeckRunBySource(
             deckType = DeckType.DAILY,
-            sourceId = dailySourceId(track.trackId, today)
+            sourceId = dailySource
         ) != null
+        val dailyActiveRun = dao.getActiveDeckRunProgressBySources(
+            deckType = DeckType.DAILY,
+            sourceIds = listOf(dailySource)
+        ).firstOrNull()?.toDomain()
+        val activeExamRunsByPackId = dao.getActiveDeckRunProgressBySources(
+            deckType = DeckType.EXAM,
+            sourceIds = packs.map { it.packId }
+        ).associateBy { it.sourceId }
         val shouldShowDailyReminder = !hasStartedDailyChallenge &&
             powerUpPreferences.shouldShowDailyReminder(today)
         val streak = dao.getStreakState() ?: StreakStateEntity(
@@ -161,7 +169,8 @@ class KitsuneRepositoryImpl(
                 level = pack.level,
                 title = pack.title,
                 status = progress?.status ?: PackProgressStatus.LOCKED,
-                bestExamScore = progress?.bestExamScore ?: 0
+                bestExamScore = progress?.bestExamScore ?: 0,
+                activeRun = activeExamRunsByPackId[pack.packId]?.toDomain()
             )
         }
         val rankSummary = computeRankSummary(trackId = track.trackId)
@@ -175,18 +184,14 @@ class KitsuneRepositoryImpl(
             currentStreakScore = normalizedStreak.currentStreakScore,
             bestStreak = normalizedStreak.bestStreak,
             hasStartedDailyChallenge = hasStartedDailyChallenge,
+            dailyActiveRun = dailyActiveRun,
             shouldShowDailyReminder = shouldShowDailyReminder,
             rankSummary = rankSummary,
-            powerUps = powerUpPreferences.getInventory(),
             packs = packProgress,
             lifetimeScore = accomplishment.lifetimeScore,
             lifetimeCardsReviewed = accomplishment.reviewedCards,
             recentRuns = recentRuns
         )
-    }
-
-    override suspend fun getPowerUps(): List<PowerUpInventory> {
-        return powerUpPreferences.getInventory()
     }
 
     override suspend fun dismissDailyReminder() {
@@ -323,10 +328,6 @@ class KitsuneRepositoryImpl(
         return mapTemplate(template)
     }
 
-    override suspend fun consumePowerUp(id: String): Boolean {
-        return powerUpPreferences.consumePowerUp(id)
-    }
-
     override suspend fun reorderDeckCards(deckRunId: String, cardIdsInOrder: List<String>) {
         database.withTransaction {
             cardIdsInOrder.forEachIndexed { index, cardId ->
@@ -355,10 +356,12 @@ class KitsuneRepositoryImpl(
         val trackAbility = dailyTrackId?.let { loadOrCreateTrackAbility(it) }
         val appliedAssists = submission.requestedAssists
             .distinct()
-            .filter { powerUpPreferences.consumePowerUp(it) }
-        val effectiveScore = (submission.score - (appliedAssists.size * ASSIST_SCORE_PENALTY))
-            .coerceIn(0, 100)
-        val quality = qualityFor(effectiveScore)
+            .filter { it.isNotBlank() }
+        val adjustedScore = applyAssistPenalty(
+            score = submission.score,
+            assistCount = appliedAssists.size
+        )
+        val quality = qualityFor(adjustedScore)
         val current = dao.getSrsState(submission.cardId)
         val baseStrength = current?.strength ?: 0
         val nextStrength = (baseStrength + quality.strengthDelta).coerceIn(0, MAX_STRENGTH)
@@ -373,7 +376,7 @@ class KitsuneRepositoryImpl(
         val nextAbility = trackAbility?.let { currentAbility ->
             evolveAbility(
                 current = currentAbility,
-                effectiveScore = effectiveScore,
+                effectiveScore = adjustedScore,
                 cardDifficulty = submission.cardDifficulty,
                 updatedAt = now
             )
@@ -384,8 +387,8 @@ class KitsuneRepositoryImpl(
             cardId = submission.cardId,
             createdAtEpochMillis = now,
             strokeCount = submission.strokeCount,
-            scoreTotal = submission.score,
-            scoreEffective = effectiveScore,
+            scoreTotal = adjustedScore,
+            scoreEffective = adjustedScore,
             scoreHandwriting = submission.handwritingScore,
             scoreKnowledge = submission.knowledgeScore,
             assistCount = appliedAssists.size,
@@ -398,14 +401,14 @@ class KitsuneRepositoryImpl(
         )
 
         database.withTransaction {
-            dao.updateDeckCardScore(deckRunId, submission.cardId, submission.score)
+            dao.updateDeckCardScore(deckRunId, submission.cardId, adjustedScore)
             dao.insertAttempt(attempt)
             dao.upsertSrsState(
                 SrsStateEntity(
                     cardId = submission.cardId,
                     strength = nextStrength,
                     dueDateIso = nextDue.toString(),
-                    lastScore = effectiveScore,
+                    lastScore = adjustedScore,
                     lapseCount = lapseCount
                 )
             )
@@ -434,7 +437,6 @@ class KitsuneRepositoryImpl(
             dao.submitDeck(deckRunId, now, average)
             if (deck.deckType == DeckType.DAILY) {
                 applyDailyStreak(today, average)
-                powerUpPreferences.awardDailyReward(today)
             } else if (deck.deckType == DeckType.EXAM) {
                 unlockedPackId = updateExamProgress(
                     packId = deck.sourceId,
@@ -502,6 +504,7 @@ class KitsuneRepositoryImpl(
                 strokePathsRaw = row.strokePathsRaw,
                 scoreTotal = row.scoreTotal,
                 scoreEffective = row.scoreEffective,
+                assistCount = row.assistCount,
                 deckType = row.deckType,
                 deckLabel = deckLabelForAttempt(row.deckType, row.sourceId, row.packTitle),
                 attemptedAtEpochMillis = row.attemptedAtEpochMillis
@@ -756,8 +759,8 @@ class KitsuneRepositoryImpl(
         handwritingScore: Int,
         submittedAtEpochMillis: Long
     ): String? {
-        val pack = dao.getPackById(packId) ?: return null
-        val passed = didPassPack(pack, score, handwritingScore)
+        if (dao.getPackById(packId) == null) return null
+        val passed = didPassPack(totalScore = score)
         val current = dao.getSinglePackProgress(packId) ?: UserPackProgressEntity(
             packId = packId,
             status = PackProgressStatus.UNLOCKED,
@@ -802,8 +805,7 @@ class KitsuneRepositoryImpl(
         unlockedPackId: String?
     ): DeckResult {
         val passedThreshold = if (deck.deckType == DeckType.EXAM) {
-            val pack = dao.getPackById(deck.sourceId)
-            if (pack == null) false else didPassPack(pack, totalScore, totalScore)
+            didPassPack(totalScore = totalScore)
         } else {
             true
         }
@@ -818,8 +820,13 @@ class KitsuneRepositoryImpl(
         )
     }
 
-    private fun didPassPack(pack: PackEntity, totalScore: Int, handwritingScore: Int): Boolean {
-        return totalScore >= pack.minTotalScore && handwritingScore >= pack.minHandwritingScore
+    private fun didPassPack(totalScore: Int): Boolean {
+        return when (scoreBandFor(totalScore)) {
+            ScoreBand.EXCELLENT,
+            ScoreBand.GOOD -> true
+            ScoreBand.OK,
+            ScoreBand.INCORRECT -> false
+        }
     }
 
     private fun pickDailyCards(
@@ -1022,11 +1029,21 @@ class KitsuneRepositoryImpl(
             .filter { it.isNotBlank() }
     }
 
+    private fun com.kitsune.kanji.japanese.flashcards.data.local.dao.ActiveDeckRunProgressRow.toDomain(): ActiveDeckRunProgress {
+        return ActiveDeckRunProgress(
+            deckRunId = deckRunId,
+            cardsReviewed = cardsReviewed,
+            totalCards = totalCards
+        )
+    }
+
     private suspend fun computeRankSummary(trackId: String): UserRankSummary {
         val ability = loadOrCreateTrackAbility(trackId)
-        val totalWords = dao.getTrackCardCount(trackId).coerceAtLeast(1)
-        val coveredWords = dao.getAttemptedCardCountForTrack(trackId).coerceAtLeast(0)
-        val coverageRatio = (coveredWords.toFloat() / totalWords.toFloat()).coerceIn(0f, 1f)
+        val trackTotalWords = dao.getTrackCardCount(trackId).coerceAtLeast(1)
+        val trackCoveredWords = dao.getAttemptedCardCountForTrack(trackId).coerceAtLeast(0)
+        val coverageRatio = (trackCoveredWords.toFloat() / trackTotalWords.toFloat()).coerceIn(0f, 1f)
+        val totalWords = dao.countCards().coerceAtLeast(1)
+        val coveredWords = dao.getAttemptedCardCount().coerceAtLeast(0)
         val difficultySnapshot = dao.getDifficultyScoreSnapshotForTrack(
             trackId = trackId,
             easyMax = EASY_DIFFICULTY_MAX,
@@ -1082,18 +1099,8 @@ class KitsuneRepositoryImpl(
         val tracks = dao.getTracks()
         if (tracks.isEmpty()) return
         val level = onboardingPreferences.getLearnerLevel()
-        val targetPackLevel = when (level) {
-            LearnerLevel.BEGINNER_N5 -> 1
-            LearnerLevel.BEGINNER_PLUS_N4 -> 3
-            LearnerLevel.INTERMEDIATE_N3 -> 6
-            LearnerLevel.ADVANCED_N2 -> 9
-            LearnerLevel.UNSURE -> 2
-        }
-
-        // Always ensure every track is unlocked up to the placement level, so newly added decks
-        // become playable even if onboarding was completed earlier.
         tracks.forEach { track ->
-            unlockPacksUpTo(track.trackId, targetPackLevel)
+            reconcileTrackPackProgress(track.trackId)
             if (dao.getTrackAbility(track.trackId) == null) {
                 val initialAbility = when (level) {
                     LearnerLevel.BEGINNER_N5 -> 1.5f
@@ -1119,8 +1126,9 @@ class KitsuneRepositoryImpl(
         }
     }
 
-    private suspend fun unlockPacksUpTo(trackId: String, targetLevel: Int) {
+    private suspend fun reconcileTrackPackProgress(trackId: String) {
         val packs = dao.getPacks(trackId)
+        var previousPackPassedGoodOrBetter = true
         packs.forEach { pack ->
             val current = dao.getSinglePackProgress(pack.packId) ?: UserPackProgressEntity(
                 packId = pack.packId,
@@ -1130,14 +1138,16 @@ class KitsuneRepositoryImpl(
                 attemptCount = 0,
                 lastAttemptEpochMillis = null
             )
+            val hasGoodOrBetter = current.bestExamScore > 0 && didPassPack(totalScore = current.bestExamScore)
             val nextStatus = when {
-                pack.level <= targetLevel -> PackProgressStatus.UNLOCKED
-                current.status == PackProgressStatus.PASSED -> PackProgressStatus.PASSED
-                else -> current.status
+                !previousPackPassedGoodOrBetter -> PackProgressStatus.LOCKED
+                hasGoodOrBetter -> PackProgressStatus.PASSED
+                else -> PackProgressStatus.UNLOCKED
             }
             if (nextStatus != current.status) {
                 dao.upsertPackProgress(current.copy(status = nextStatus))
             }
+            previousPackPassedGoodOrBetter = nextStatus == PackProgressStatus.PASSED
         }
     }
 
@@ -1237,7 +1247,6 @@ class KitsuneRepositoryImpl(
     )
 
     companion object {
-        private const val ASSIST_SCORE_PENALTY = 12
         private const val MAX_STRENGTH = 8
         private const val EASY_DIFFICULTY_MAX = 4
         private const val HARD_DIFFICULTY_MIN = 8

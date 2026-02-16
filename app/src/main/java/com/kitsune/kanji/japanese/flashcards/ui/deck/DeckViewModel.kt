@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.OnboardingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.ink.HandwritingScorer
@@ -15,7 +15,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.CardSubmission
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckCard
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
-import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.applyAssistPenalty
 import kotlin.math.abs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,19 +27,15 @@ data class DeckUiState(
     val deckRunId: String = "",
     val session: DeckSession? = null,
     val currentIndex: Int = 0,
-    val powerUps: List<PowerUpInventory> = emptyList(),
-    val activeHintCardId: String? = null,
-    val activeHintText: String? = null,
-    val activeHintReveal: LuckyHintReveal? = null,
     val latestFeedback: String? = null,
     val latestScore: Int? = null,
-    val latestEffectiveScore: Int? = null,
     val latestMatchedAnswer: String? = null,
     val latestCanonicalAnswer: String? = null,
     val latestIsCanonical: Boolean = true,
     val latestSubmissionToken: Long = 0L,
     val sessionTargetScore: Float = 82f,
     val deckResult: DeckResult? = null,
+    val showGestureHelp: Boolean = true,
     val errorMessage: String? = null
 ) {
     val activeCards: List<DeckCard>
@@ -66,7 +62,8 @@ enum class KanjiHintRevealMode {
 
 class DeckViewModel(
     private val repository: KitsuneRepository,
-    private val handwritingScorer: HandwritingScorer
+    private val handwritingScorer: HandwritingScorer,
+    private val onboardingPreferences: OnboardingPreferences
 ) : ViewModel() {
     private var deckRunId: String? = null
 
@@ -87,19 +84,27 @@ class DeckViewModel(
             it.copy(
                 deckRunId = deckRunId,
                 currentIndex = 0,
-                activeHintCardId = null,
-                activeHintText = null,
-                activeHintReveal = null,
                 latestScore = null,
                 latestFeedback = null,
                 latestMatchedAnswer = null,
                 latestCanonicalAnswer = null,
                 latestIsCanonical = true,
                 latestSubmissionToken = 0L,
+                showGestureHelp = true,
                 deckResult = null
             )
         }
+        loadGestureHelpPreference()
         loadDeck(deckRunId)
+    }
+
+    fun dismissGestureHelp(neverShowAgain: Boolean) {
+        viewModelScope.launch {
+            if (neverShowAgain) {
+                onboardingPreferences.setDeckHowToPlayDismissed(dismissed = true)
+            }
+            _uiState.update { it.copy(showGestureHelp = false) }
+        }
     }
 
     fun goPrevious() {
@@ -140,10 +145,7 @@ class DeckViewModel(
         val currentVisibleIndex = _uiState.value.currentIndex
         val activeAssists = requestedAssists
             .distinct()
-            .filterNot {
-                it == PowerUpPreferences.POWER_UP_LUCKY_COIN ||
-                    it == PowerUpPreferences.POWER_UP_KITSUNE_CHARM
-            }
+            .filter { it.isNotBlank() }
         viewModelScope.launch {
             runCatching {
                 val bestCandidate = evaluateSubmission(
@@ -173,26 +175,22 @@ class DeckViewModel(
                 )
                 repository.submitCard(deckRunId = runId, submission = submission)
                 val refreshed = repository.loadDeck(runId) ?: error("Deck not found")
-                val powerUps = repository.getPowerUps()
                 val reranked = rerankUnrevealedCards(
                     session = refreshed,
                     currentCardId = card.cardId
                 )
-                Triple(reranked, bestCandidate, powerUps)
-            }.onSuccess { (session, handwriting, powerUps) ->
-                val effectiveScore = (handwriting.totalScore - (activeAssists.size * ASSIST_SCORE_PENALTY))
-                    .coerceIn(0, 100)
+                reranked to bestCandidate
+            }.onSuccess { (session, handwriting) ->
+                val adjustedScore = applyAssistPenalty(
+                    score = handwriting.totalScore,
+                    assistCount = activeAssists.size
+                )
                 _uiState.update {
                     it.copy(
                         session = session,
                         currentIndex = resolveCurrentIndex(session.cards, currentVisibleIndex),
-                        powerUps = powerUps,
-                        activeHintCardId = null,
-                        activeHintText = null,
-                        activeHintReveal = null,
                         latestFeedback = handwriting.feedback,
-                        latestScore = handwriting.totalScore,
-                        latestEffectiveScore = effectiveScore,
+                        latestScore = adjustedScore,
                         latestMatchedAnswer = handwriting.matchedAnswer,
                         latestCanonicalAnswer = handwriting.canonicalAnswer,
                         latestIsCanonical = handwriting.isCanonical,
@@ -206,14 +204,6 @@ class DeckViewModel(
                     it.copy(errorMessage = error.message ?: "Failed to submit card.")
                 }
             }
-        }
-    }
-
-    fun usePowerUp(powerUpId: String) {
-        when (powerUpId) {
-            PowerUpPreferences.POWER_UP_LUCKY_COIN -> useLuckyCoin()
-            PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> useKitsuneCharm()
-            else -> return
         }
     }
 
@@ -238,19 +228,13 @@ class DeckViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
-                val session = repository.loadDeck(deckRunId) ?: error("Deck not found.")
-                val powerUps = repository.getPowerUps()
-                session to powerUps
-            }.onSuccess { (session, powerUps) ->
+                repository.loadDeck(deckRunId) ?: error("Deck not found.")
+            }.onSuccess { session ->
                 _uiState.update {
                     it.copy(
                         isLoading = false,
                         session = session,
                         currentIndex = resolveCurrentIndex(session.cards, it.currentIndex),
-                        powerUps = powerUps,
-                        activeHintCardId = null,
-                        activeHintText = null,
-                        activeHintReveal = null,
                         latestMatchedAnswer = null,
                         latestCanonicalAnswer = null,
                         latestIsCanonical = true,
@@ -335,18 +319,21 @@ class DeckViewModel(
         if (userAnswer.isBlank()) {
             error("Answer is required before submit.")
         }
-        val normalizedCanonical = normalizeAnswer(card.canonicalAnswer)
-        val normalizedAccepted = card.acceptedAnswers
-            .ifEmpty { listOf(card.canonicalAnswer) }
-            .map { normalizeAnswer(it) }
-            .toSet()
-        val normalizedUser = normalizeAnswer(userAnswer)
-        val isAccepted = normalizedUser in normalizedAccepted
-        val isCanonical = normalizedUser == normalizedCanonical
+        val acceptedAnswers = (card.acceptedAnswers + card.canonicalAnswer)
+            .distinct()
+        val canonicalForms = comparableAnswerForms(card.canonicalAnswer)
+        val acceptedFormsByAnswer = acceptedAnswers.associateWith(::comparableAnswerForms)
+        val userForms = comparableAnswerForms(userAnswer)
+        val matchedAccepted = acceptedAnswers.firstOrNull { accepted ->
+            val acceptedForms = acceptedFormsByAnswer[accepted].orEmpty()
+            userForms.any { it in acceptedForms }
+        }
+        val isAccepted = matchedAccepted != null
+        val isCanonical = userForms.any { it in canonicalForms }
         val knowledgeScore = when {
             isCanonical -> 100
             isAccepted -> 90
-            else -> 34
+            else -> 0
         }
         val feedback = when {
             isCanonical -> "Exact match."
@@ -354,7 +341,7 @@ class DeckViewModel(
             else -> "Incorrect. Canonical answer: ${card.canonicalAnswer}"
         }
         return CandidateScore(
-            matchedAnswer = userAnswer,
+            matchedAnswer = matchedAccepted ?: userAnswer,
             canonicalAnswer = card.canonicalAnswer,
             isCanonical = isCanonical,
             handwritingScore = if (isAccepted) 100 else 0,
@@ -372,98 +359,239 @@ class DeckViewModel(
 
     private fun normalizeAnswer(raw: String): String {
         return raw.trim()
-            .replace(" ", "")
-            .replace("\u3000", "")
+            .replace(Regex("""[\s\u3000]+"""), "")
+            .replace("’", "'")
+            .replace("・", "")
+            .replace("。", "")
+            .replace("、", "")
+            .replace(",", "")
             .lowercase()
     }
 
-    private fun useLuckyCoin() {
-        val state = _uiState.value
-        val card = state.currentCard ?: return
-        viewModelScope.launch {
-            runCatching {
-                val consumed = repository.consumePowerUp(PowerUpPreferences.POWER_UP_LUCKY_COIN)
-                if (!consumed) error("No Lucky Coin available.")
-                val powerUps = repository.getPowerUps()
-                powerUps to luckyHintFor(card)
-            }.onSuccess { (powerUps, hintPayload) ->
-                _uiState.update {
-                    it.copy(
-                        powerUps = powerUps,
-                        activeHintCardId = card.cardId,
-                        activeHintText = hintPayload.text,
-                        activeHintReveal = hintPayload.reveal,
-                        latestFeedback = "Lucky Coin used. Hint revealed.",
-                        errorMessage = null
-                    )
-                }
-            }.onFailure { error ->
-                _uiState.update {
-                    it.copy(errorMessage = error.message ?: "Failed to use Lucky Coin.")
-                }
+    private fun comparableAnswerForms(raw: String): Set<String> {
+        val base = normalizeAnswer(raw)
+        if (base.isBlank()) return emptySet()
+        val forms = linkedSetOf(base)
+        val hira = katakanaToHiragana(base)
+        if (hira.isNotBlank()) {
+            forms += hira
+            if (isKanaOnly(hira)) {
+                forms += normalizeAnswer(hiraganaToRomaji(hira))
             }
+        }
+        if (containsLatinLetters(base)) {
+            val romajiHira = romanizedToHiragana(base)
+            if (romajiHira.isNotBlank()) {
+                forms += romajiHira
+                forms += normalizeAnswer(hiraganaToRomaji(romajiHira))
+            }
+        }
+        return forms.filter { it.isNotBlank() }.toSet()
+    }
+
+    private fun katakanaToHiragana(text: String): String {
+        if (text.isBlank()) return text
+        val builder = StringBuilder(text.length)
+        text.forEach { ch ->
+            builder.append(
+                when (ch) {
+                    in '\u30A1'..'\u30F6' -> (ch.code - 0x60).toChar()
+                    '\u30FC' -> ch
+                    else -> ch
+                }
+            )
+        }
+        return builder.toString()
+    }
+
+    private fun isKanaOnly(text: String): Boolean {
+        return text.all { ch ->
+            ch in '\u3040'..'\u309F' || ch == '\u30FC'
         }
     }
 
-    private fun useKitsuneCharm() {
-        val runId = deckRunId ?: return
-        val state = _uiState.value
-        val session = state.session ?: return
-        val currentCard = state.currentCard ?: return
-        val currentDeckIndex = session.cards.indexOfFirst { it.cardId == currentCard.cardId }
-        if (currentDeckIndex < 0) return
+    private fun containsLatinLetters(text: String): Boolean {
+        return text.any { it in 'a'..'z' || it in 'A'..'Z' }
+    }
 
-        viewModelScope.launch {
-            runCatching {
-                val consumed = repository.consumePowerUp(PowerUpPreferences.POWER_UP_KITSUNE_CHARM)
-                if (!consumed) error("No Kitsune Charm available.")
-                val targetIndex = pickSwapTargetIndex(session.cards, currentCard.cardId)
-                    ?: error("No unanswered card available to swap in.")
-                val swapped = swapCards(session.cards, currentDeckIndex, targetIndex)
-                repository.reorderDeckCards(
-                    deckRunId = runId,
-                    cardIdsInOrder = swapped.map { it.cardId }
-                )
-                val refreshed = repository.loadDeck(runId) ?: error("Deck not found")
-                val powerUps = repository.getPowerUps()
-                refreshed to powerUps
-            }.onSuccess { (refreshedSession, powerUps) ->
-                _uiState.update {
-                    it.copy(
-                        session = refreshedSession,
-                        currentIndex = resolveCurrentIndex(refreshedSession.cards, it.currentIndex),
-                        powerUps = powerUps,
-                        activeHintCardId = null,
-                        activeHintText = null,
-                        activeHintReveal = null,
-                        latestFeedback = "Kitsune Charm swapped this question.",
-                        errorMessage = null
-                    )
+    private fun romanizedToHiragana(romaji: String): String {
+        val normalized = romaji
+            .lowercase()
+            .replace("-", "")
+            .replace(" ", "")
+        if (normalized.isBlank()) return ""
+        val result = StringBuilder()
+        var index = 0
+        while (index < normalized.length) {
+            val current = normalized[index]
+            val next = normalized.getOrNull(index + 1)
+
+            if (
+                next != null &&
+                current == next &&
+                current in "bcdfghjklmpqrstvwxyz" &&
+                current != 'n'
+            ) {
+                result.append('っ')
+                index += 1
+                continue
+            }
+
+            if (current == 'n') {
+                if (next == null) {
+                    result.append('ん')
+                    index += 1
+                    continue
                 }
-            }.onFailure { error ->
-                _uiState.update {
-                    it.copy(errorMessage = error.message ?: "Failed to use Kitsune Charm.")
+                if (next == '\'') {
+                    result.append('ん')
+                    index += 2
+                    continue
+                }
+                if (next == 'n') {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+                if (next !in "aeiouy") {
+                    result.append('ん')
+                    index += 1
+                    continue
                 }
             }
+
+            val kanaEntry = ROMAJI_TO_HIRAGANA.firstOrNull { (latin, _) ->
+                normalized.startsWith(latin, startIndex = index)
+            }
+            if (kanaEntry != null) {
+                result.append(kanaEntry.second)
+                index += kanaEntry.first.length
+            } else {
+                result.append(current)
+                index += 1
+            }
+        }
+        return result.toString()
+    }
+
+    private fun hiraganaToRomaji(hiragana: String): String {
+        val normalized = katakanaToHiragana(hiragana)
+        if (normalized.isBlank()) return ""
+        val result = StringBuilder()
+        var index = 0
+        while (index < normalized.length) {
+            val current = normalized[index]
+            if (current == 'っ') {
+                val nextPair = normalized.substring(index + 1).take(2)
+                val nextSingle = normalized.getOrNull(index + 1)?.toString().orEmpty()
+                val nextRomaji = HIRAGANA_TO_ROMAJI[nextPair] ?: HIRAGANA_TO_ROMAJI[nextSingle]
+                if (!nextRomaji.isNullOrBlank()) {
+                    result.append(nextRomaji.first())
+                }
+                index += 1
+                continue
+            }
+            val pair = normalized.substring(index).take(2)
+            val pairRomaji = HIRAGANA_TO_ROMAJI[pair]
+            if (pairRomaji != null) {
+                result.append(pairRomaji)
+                index += 2
+                continue
+            }
+            val single = HIRAGANA_TO_ROMAJI[current.toString()]
+            if (single != null) {
+                result.append(single)
+            } else if (current != 'ー') {
+                result.append(current)
+            }
+            index += 1
+        }
+        return result.toString()
+    }
+
+    private fun loadGestureHelpPreference() {
+        viewModelScope.launch {
+            val shouldShow = onboardingPreferences.shouldShowDeckHowToPlay()
+            _uiState.update { it.copy(showGestureHelp = shouldShow) }
         }
     }
 
     companion object {
         fun factory(
             repository: KitsuneRepository,
-            handwritingScorer: HandwritingScorer
+            handwritingScorer: HandwritingScorer,
+            onboardingPreferences: OnboardingPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 DeckViewModel(
                     repository = repository,
-                    handwritingScorer = handwritingScorer
+                    handwritingScorer = handwritingScorer,
+                    onboardingPreferences = onboardingPreferences
                 )
             }
         }
     }
 }
 
-private const val ASSIST_SCORE_PENALTY = 12
+private val ROMAJI_TO_HIRAGANA = listOf(
+    "kya" to "きゃ", "kyu" to "きゅ", "kyo" to "きょ",
+    "sha" to "しゃ", "shu" to "しゅ", "sho" to "しょ",
+    "cha" to "ちゃ", "chu" to "ちゅ", "cho" to "ちょ",
+    "nya" to "にゃ", "nyu" to "にゅ", "nyo" to "にょ",
+    "hya" to "ひゃ", "hyu" to "ひゅ", "hyo" to "ひょ",
+    "mya" to "みゃ", "myu" to "みゅ", "myo" to "みょ",
+    "rya" to "りゃ", "ryu" to "りゅ", "ryo" to "りょ",
+    "gya" to "ぎゃ", "gyu" to "ぎゅ", "gyo" to "ぎょ",
+    "bya" to "びゃ", "byu" to "びゅ", "byo" to "びょ",
+    "pya" to "ぴゃ", "pyu" to "ぴゅ", "pyo" to "ぴょ",
+    "ja" to "じゃ", "ju" to "じゅ", "jo" to "じょ",
+    "shi" to "し", "chi" to "ち", "tsu" to "つ", "fu" to "ふ",
+    "ka" to "か", "ki" to "き", "ku" to "く", "ke" to "け", "ko" to "こ",
+    "sa" to "さ", "su" to "す", "se" to "せ", "so" to "そ",
+    "ta" to "た", "te" to "て", "to" to "と",
+    "na" to "な", "ni" to "に", "nu" to "ぬ", "ne" to "ね", "no" to "の",
+    "ha" to "は", "hi" to "ひ", "he" to "へ", "ho" to "ほ",
+    "ma" to "ま", "mi" to "み", "mu" to "む", "me" to "め", "mo" to "も",
+    "ya" to "や", "yu" to "ゆ", "yo" to "よ",
+    "ra" to "ら", "ri" to "り", "ru" to "る", "re" to "れ", "ro" to "ろ",
+    "wa" to "わ", "wo" to "を",
+    "ga" to "が", "gi" to "ぎ", "gu" to "ぐ", "ge" to "げ", "go" to "ご",
+    "za" to "ざ", "ji" to "じ", "zu" to "ず", "ze" to "ぜ", "zo" to "ぞ",
+    "da" to "だ", "de" to "で", "do" to "ど",
+    "ba" to "ば", "bi" to "び", "bu" to "ぶ", "be" to "べ", "bo" to "ぼ",
+    "pa" to "ぱ", "pi" to "ぴ", "pu" to "ぷ", "pe" to "ぺ", "po" to "ぽ",
+    "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お"
+)
+
+private val HIRAGANA_TO_ROMAJI = mapOf(
+    "きゃ" to "kya", "きゅ" to "kyu", "きょ" to "kyo",
+    "しゃ" to "sha", "しゅ" to "shu", "しょ" to "sho",
+    "ちゃ" to "cha", "ちゅ" to "chu", "ちょ" to "cho",
+    "にゃ" to "nya", "にゅ" to "nyu", "にょ" to "nyo",
+    "ひゃ" to "hya", "ひゅ" to "hyu", "ひょ" to "hyo",
+    "みゃ" to "mya", "みゅ" to "myu", "みょ" to "myo",
+    "りゃ" to "rya", "りゅ" to "ryu", "りょ" to "ryo",
+    "ぎゃ" to "gya", "ぎゅ" to "gyu", "ぎょ" to "gyo",
+    "じゃ" to "ja", "じゅ" to "ju", "じょ" to "jo",
+    "びゃ" to "bya", "びゅ" to "byu", "びょ" to "byo",
+    "ぴゃ" to "pya", "ぴゅ" to "pyu", "ぴょ" to "pyo",
+    "し" to "shi", "ち" to "chi", "つ" to "tsu", "ふ" to "fu",
+    "か" to "ka", "き" to "ki", "く" to "ku", "け" to "ke", "こ" to "ko",
+    "さ" to "sa", "す" to "su", "せ" to "se", "そ" to "so",
+    "た" to "ta", "て" to "te", "と" to "to",
+    "な" to "na", "に" to "ni", "ぬ" to "nu", "ね" to "ne", "の" to "no",
+    "は" to "ha", "ひ" to "hi", "へ" to "he", "ほ" to "ho",
+    "ま" to "ma", "み" to "mi", "む" to "mu", "め" to "me", "も" to "mo",
+    "や" to "ya", "ゆ" to "yu", "よ" to "yo",
+    "ら" to "ra", "り" to "ri", "る" to "ru", "れ" to "re", "ろ" to "ro",
+    "わ" to "wa", "を" to "o", "ん" to "n",
+    "が" to "ga", "ぎ" to "gi", "ぐ" to "gu", "げ" to "ge", "ご" to "go",
+    "ざ" to "za", "じ" to "ji", "ず" to "zu", "ぜ" to "ze", "ぞ" to "zo",
+    "だ" to "da", "で" to "de", "ど" to "do",
+    "ば" to "ba", "び" to "bi", "ぶ" to "bu", "べ" to "be", "ぼ" to "bo",
+    "ぱ" to "pa", "ぴ" to "pi", "ぷ" to "pu", "ぺ" to "pe", "ぽ" to "po",
+    "あ" to "a", "い" to "i", "う" to "u", "え" to "e", "お" to "o"
+)
 
 private data class CandidateScore(
     val matchedAnswer: String,
@@ -520,41 +648,6 @@ private fun scoreBinaryHandwritingCandidate(
     )
 }
 
-private fun pickSwapTargetIndex(cards: List<DeckCard>, currentCardId: String): Int? {
-    val currentIndex = cards.indexOfFirst { it.cardId == currentCardId }
-    if (currentIndex < 0) return null
-    val current = cards[currentIndex]
-    val candidates = cards.withIndex()
-        .filter { indexed ->
-            indexed.index > currentIndex &&
-                indexed.value.resultScore == null &&
-                indexed.value.cardId != current.cardId
-        }
-    if (candidates.isEmpty()) return null
-    val answeredAverage = cards.mapNotNull { it.resultScore }
-        .average()
-        .toFloat()
-        .takeIf { !it.isNaN() } ?: 78f
-    return if (answeredAverage >= 90f) {
-        candidates.maxByOrNull { it.value.difficulty }?.index
-    } else {
-        candidates.minByOrNull { indexed ->
-            abs(indexed.value.difficulty - current.difficulty)
-        }?.index
-    }
-}
-
-private fun swapCards(cards: List<DeckCard>, first: Int, second: Int): List<DeckCard> {
-    if (first !in cards.indices || second !in cards.indices || first == second) return cards
-    val mutable = cards.toMutableList()
-    val temp = mutable[first]
-    mutable[first] = mutable[second]
-    mutable[second] = temp
-    return mutable.mapIndexed { index, card ->
-        card.copy(position = index + 1)
-    }
-}
-
 private fun rerankUnrevealedCards(session: DeckSession, currentCardId: String?): DeckSession {
     if (session.cards.isEmpty()) return session
     val answered = session.cards.filter { it.resultScore != null }
@@ -589,59 +682,6 @@ private fun resolveCurrentIndex(cards: List<DeckCard>, preferredIndex: Int): Int
     val unansweredCount = cards.count { it.resultScore == null }
     if (unansweredCount <= 0) return 0
     return preferredIndex.coerceIn(0, unansweredCount - 1)
-}
-
-private data class LuckyHintPayload(
-    val text: String,
-    val reveal: LuckyHintReveal? = null
-)
-
-private fun luckyHintFor(card: DeckCard): LuckyHintPayload {
-    return when (card.type) {
-        CardType.KANJI_WRITE -> {
-            val answer = card.canonicalAnswer
-            val revealKanji = answer.firstOrNull()?.toString()
-            val revealMode = revealKanji
-                ?.firstOrNull()
-                ?.let { codepoint ->
-                    if (codepoint.code % 2 == 0) {
-                        KanjiHintRevealMode.TOP_STROKE_SLICE
-                    } else {
-                        KanjiHintRevealMode.TOP_LEFT_QUADRANT
-                    }
-                }
-            val text = if (answer.length > 1) {
-                "Hint: partial reveal is shown for the first kanji."
-            } else {
-                "Hint: partial kanji reveal shown below."
-            }
-            LuckyHintPayload(
-                text = text,
-                reveal = if (revealKanji != null && revealMode != null) {
-                    LuckyHintReveal(kanji = revealKanji, mode = revealMode)
-                } else {
-                    null
-                }
-            )
-        }
-
-        CardType.GRAMMAR_CHOICE,
-        CardType.KANJI_READING,
-        CardType.SENTENCE_COMPREHENSION,
-        CardType.VOCAB_READING -> {
-            val answer = card.canonicalAnswer
-            LuckyHintPayload(
-                text = "Hint: answer starts with \"${answer.take(1)}\" and has ${answer.length} character(s)."
-            )
-        }
-
-        else -> {
-            val answer = card.canonicalAnswer
-            LuckyHintPayload(
-                text = "Hint: answer starts with \"${answer.take(1)}\"."
-            )
-        }
-    }
 }
 
 private fun encodeInkSample(sample: InkSample): String? {

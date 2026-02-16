@@ -20,16 +20,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoFixHigh
-import androidx.compose.material.icons.filled.Casino
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -62,22 +60,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kitsune.kanji.japanese.flashcards.R
-import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
-import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
+import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeById
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 import androidx.compose.material3.rememberDrawerState
-
-private const val DECK_LEVEL_MAX_SCORE = 100
 
 @Composable
 fun HomeScreen(
@@ -88,14 +84,16 @@ fun HomeScreen(
     onDismissDailyReminder: () -> Unit,
     onBrowseDecks: () -> Unit,
     onOpenSettings: () -> Unit,
-    onOpenProfile: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenUpgrade: () -> Unit
 ) {
     var showDailyPrompt by rememberSaveable { mutableStateOf(false) }
-    val selectedPack = remember(state.selectedPackId, state.packs) {
-        val selected = state.packs.firstOrNull { it.packId == state.selectedPackId }
-        selected ?: state.packs.firstOrNull()
+    val orderedPacks = remember(state.packs) {
+        packsOrderedByMostRecentUnlocked(state.packs)
+    }
+    val selectedPack = remember(state.selectedPackId, orderedPacks) {
+        val selected = orderedPacks.firstOrNull { it.packId == state.selectedPackId }
+        selected ?: orderedPacks.firstOrNull()
     }
     val selectedDeckTheme = remember(state.selectedDeckThemeId) {
         deckThemeById(state.selectedDeckThemeId)
@@ -150,19 +148,52 @@ fun HomeScreen(
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFFFFF1E7))
                         .border(1.dp, Color(0xFFFFCAA8), RoundedCornerShape(12.dp))
+                        .clickable {
+                            scope.launch { drawerState.close() }
+                            onOpenHistory()
+                        }
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Rank Lv ${state.rankSummary.level} · ${state.rankSummary.title}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF3A2419)
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.History,
+                                contentDescription = null,
+                                tint = Color(0xFF8B3A2E),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Open history",
+                                tint = Color(0xFF8B3A2E),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                     Text(
-                        text = "Rank Lv ${state.rankSummary.level} · ${state.rankSummary.title}",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF3A2419)
-                    )
-                    Text(
-                        text = "Words covered ${state.rankSummary.wordsCovered}/${state.rankSummary.totalWords}",
+                        text = "Words covered (all decks) ${state.rankSummary.wordsCovered}/${state.rankSummary.totalWords}",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF6A4A39)
+                    )
+                    Text(
+                        text = "Tap to view covered words history",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF8B3A2E),
+                        fontWeight = FontWeight.Medium
                     )
                     val easy = state.rankSummary.easyWordScore
                     val hard = state.rankSummary.hardWordScore
@@ -174,35 +205,6 @@ fun HomeScreen(
                         )
                     }
                 }
-                NavigationDrawerItem(
-                    label = {
-                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                            Text("Profile")
-                            Text(
-                                text = "${state.rankSummary.title} · Lv ${state.rankSummary.level}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF7A6356)
-                            )
-                        }
-                    },
-                    icon = { Icon(imageVector = Icons.Filled.Person, contentDescription = null) },
-                    selected = false,
-                    onClick = {
-                        scope.launch { drawerState.close() }
-                        onOpenProfile()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-                NavigationDrawerItem(
-                    label = { Text("Card History") },
-                    icon = { Icon(imageVector = Icons.Filled.History, contentDescription = null) },
-                    selected = false,
-                    onClick = {
-                        scope.launch { drawerState.close() }
-                        onOpenHistory()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
                 NavigationDrawerItem(
                     label = { Text("Settings") },
                     icon = { Icon(imageVector = Icons.Filled.Settings, contentDescription = null) },
@@ -260,7 +262,6 @@ fun HomeScreen(
                         ) {
                     item {
                         SeasonalHeroHeader(
-                            powerUps = state.powerUps,
                             selectedDeckTitle = selectedDeckTheme.title
                         )
                     }
@@ -326,6 +327,9 @@ fun HomeScreen(
                         }
                     }
                     item {
+                        val dailyActiveRun = state.dailyActiveRun
+                        val hasPendingDailyRun = dailyActiveRun != null &&
+                            dailyActiveRun.cardsReviewed < dailyActiveRun.totalCards
                         Button(
                             onClick = onStartDailyDeck,
                             enabled = !state.isStartingDeck,
@@ -333,10 +337,25 @@ fun HomeScreen(
                         ) {
                             val label = if (state.isStartingDeck) {
                                 "Preparing Daily Challenge..."
+                            } else if (hasPendingDailyRun) {
+                                "Resume Daily Challenge (${dailyActiveRun.cardsReviewed}/${dailyActiveRun.totalCards})"
                             } else {
                                 "Start Daily Challenge (15 Cards)"
                             }
                             Text(label)
+                        }
+                    }
+                    item {
+                        val dailyActiveRun = state.dailyActiveRun
+                        val hasPendingDailyRun = dailyActiveRun != null &&
+                            dailyActiveRun.cardsReviewed < dailyActiveRun.totalCards
+                        if (hasPendingDailyRun) {
+                            Text(
+                                text = "Pending daily run: ${dailyActiveRun.totalCards - dailyActiveRun.cardsReviewed} cards remaining",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF8B3A2E),
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
                     item {
@@ -365,12 +384,12 @@ fun HomeScreen(
                             )
                         }
                     }
-                    itemsIndexed(state.packs, key = { _, pack -> pack.packId }) { index, pack ->
+                    itemsIndexed(orderedPacks, key = { _, pack -> pack.packId }) { index, pack ->
                         PackTimelineItem(
                             pack = pack,
                             themeId = selectedDeckTheme.id,
                             isFirst = index == 0,
-                            isLast = index == state.packs.lastIndex,
+                            isLast = index == orderedPacks.lastIndex,
                             isLoading = state.startingPackId == pack.packId,
                             onStartExamPack = onStartExamPack
                         )
@@ -445,6 +464,17 @@ fun HomeScreen(
     }
 }
 
+private fun packsOrderedByMostRecentUnlocked(packs: List<PackProgress>): List<PackProgress> {
+    if (packs.isEmpty()) return packs
+    val unlocked = packs
+        .filter { it.status != PackProgressStatus.LOCKED }
+        .sortedByDescending { it.level }
+    val locked = packs
+        .filter { it.status == PackProgressStatus.LOCKED }
+        .sortedBy { it.level }
+    return unlocked + locked
+}
+
 private fun homeBackgroundForTheme(themeId: String): List<Color> {
     return when (themeId) {
         "food" -> listOf(Color(0x33FFF6EA), Color(0xCCFFFDF9))
@@ -458,88 +488,7 @@ private fun homeBackgroundForTheme(themeId: String): List<Color> {
 }
 
 @Composable
-private fun PowerUpTray(
-    powerUps: List<PowerUpInventory>,
-    modifier: Modifier = Modifier
-) {
-    var selectedPowerUpId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selected = powerUps.firstOrNull { it.id == selectedPowerUpId }
-
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            powerUps.forEach { powerUp ->
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xE6FFFFFF))
-                        .border(1.dp, Color(0xFFFFB990), RoundedCornerShape(12.dp))
-                        .clickable {
-                            selectedPowerUpId = if (selectedPowerUpId == powerUp.id) null else powerUp.id
-                        }
-                        .padding(horizontal = 7.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = iconForPowerUp(powerUp.id),
-                            contentDescription = powerUp.title,
-                            tint = Color(0xFFFF5A00),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = powerUp.count.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF2A211B),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-        }
-
-        if (selected != null) {
-            Box(
-                modifier = Modifier
-                    .width(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xF2FFFFFF))
-                    .border(1.dp, Color(0xFFFFB990), RoundedCornerShape(12.dp))
-                    .padding(10.dp)
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "${selected.title} (${selected.count})",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = Color(0xFFFF5A00),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = selected.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF2A211B)
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun iconForPowerUp(powerUpId: String): ImageVector {
-    return when (powerUpId) {
-        PowerUpPreferences.POWER_UP_LUCKY_COIN -> Icons.Filled.Casino
-        PowerUpPreferences.POWER_UP_HINT_BRUSH -> Icons.Filled.Visibility
-        PowerUpPreferences.POWER_UP_KITSUNE_CHARM -> Icons.Filled.Pets
-        else -> Icons.Filled.AutoFixHigh
-    }
-}
-
-@Composable
 private fun SeasonalHeroHeader(
-    powerUps: List<PowerUpInventory>,
     selectedDeckTitle: String
 ) {
     val now = remember { LocalDate.now() }
@@ -598,13 +547,6 @@ private fun SeasonalHeroHeader(
                 color = Color(0xFFF3E7D9)
             )
         }
-
-        PowerUpTray(
-            powerUps = powerUps,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(10.dp)
-        )
     }
 }
 @Composable
@@ -715,6 +657,11 @@ private fun PackDeckCard(
 ) {
     val background = themeCardBackground(themeId)
     val border = themeCardBorder(themeId)
+    val bestScoreColor = scoreVisualFor(pack.bestExamScore).toneColor
+    val bestGradeLabel = bestGradeLabelForScore(pack.bestExamScore)
+    val bestGradeStars = starsForBestGrade(pack.bestExamScore)
+    val activeRun = pack.activeRun
+    val hasPendingRun = activeRun != null && activeRun.cardsReviewed < activeRun.totalCards
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
@@ -766,19 +713,33 @@ private fun PackDeckCard(
                     }
                 }
 
-                if (pack.status == PackProgressStatus.LOCKED) {
-                    Icon(
-                        imageVector = Icons.Filled.Lock,
-                        contentDescription = "Locked",
-                        tint = Color(0xFF8E8176),
-                        modifier = Modifier.size(18.dp)
-                    )
-                } else {
+                Column(horizontalAlignment = Alignment.End) {
+                    if (pack.status == PackProgressStatus.LOCKED) {
+                        Icon(
+                            imageVector = Icons.Filled.Lock,
+                            contentDescription = "Locked",
+                            tint = Color(0xFF8E8176),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     Text(
-                        text = "Best ${pack.bestExamScore}/$DECK_LEVEL_MAX_SCORE",
+                        text = "Best: $bestGradeLabel",
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.Medium,
+                        color = if (pack.status == PackProgressStatus.LOCKED) Color(0xFF8E8176) else bestScoreColor
                     )
+                    GradeStarsRow(
+                        filledStars = bestGradeStars,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    if (pack.status != PackProgressStatus.LOCKED && hasPendingRun) {
+                        Text(
+                            text = "Resume ${activeRun.cardsReviewed}/${activeRun.totalCards}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF8B3A2E),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -788,7 +749,15 @@ private fun PackDeckCard(
                     enabled = !isLoading,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(if (isLoading) "Preparing..." else "Start Exam Pack")
+                    Text(
+                        if (isLoading) {
+                            "Preparing..."
+                        } else if (hasPendingRun) {
+                            "Resume Exam Pack"
+                        } else {
+                            "Start Exam Pack"
+                        }
+                    )
                 }
             }
         }
@@ -804,6 +773,11 @@ private fun FeaturedPackCard(
 ) {
     val background = themeCardBackground(themeId)
     val border = themeCardBorder(themeId)
+    val bestScoreColor = scoreVisualFor(pack.bestExamScore).toneColor
+    val bestGradeLabel = bestGradeLabelForScore(pack.bestExamScore)
+    val bestGradeStars = starsForBestGrade(pack.bestExamScore)
+    val activeRun = pack.activeRun
+    val hasPendingRun = activeRun != null && activeRun.cardsReviewed < activeRun.totalCards
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -844,9 +818,22 @@ private fun FeaturedPackCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Level ${pack.level}: ${pack.title}", fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Best ${pack.bestExamScore}/$DECK_LEVEL_MAX_SCORE",
-                        style = MaterialTheme.typography.bodySmall
+                        "Best: $bestGradeLabel",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (pack.status == PackProgressStatus.LOCKED) Color(0xFF8E8176) else bestScoreColor
                     )
+                    GradeStarsRow(
+                        filledStars = bestGradeStars,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    if (hasPendingRun) {
+                        Text(
+                            text = "Pending review ${activeRun.cardsReviewed}/${activeRun.totalCards}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF8B3A2E),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
             OutlinedButton(
@@ -854,7 +841,15 @@ private fun FeaturedPackCard(
                 enabled = pack.status != PackProgressStatus.LOCKED && !isLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isLoading) "Preparing..." else "Start Selected Pack")
+                Text(
+                    if (isLoading) {
+                        "Preparing..."
+                    } else if (hasPendingRun) {
+                        "Resume Selected Pack"
+                    } else {
+                        "Start Selected Pack"
+                    }
+                )
             }
         }
     }
@@ -905,6 +900,45 @@ private fun PackImagePlaceholder(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun GradeStarsRow(
+    filledStars: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        repeat(3) { index ->
+            val filled = index < filledStars
+            Icon(
+                imageVector = if (filled) Icons.Filled.Star else Icons.Filled.StarBorder,
+                contentDescription = null,
+                tint = if (filled) Color(0xFFD4A42E) else Color(0xFFBEAC96),
+                modifier = Modifier.size(13.dp)
+            )
+        }
+    }
+}
+
+private fun bestGradeLabelForScore(score: Int): String {
+    return if (score <= 0) {
+        "Unrated"
+    } else {
+        scoreVisualFor(score).label
+    }
+}
+
+private fun starsForBestGrade(score: Int): Int {
+    return when (scoreBandFor(score)) {
+        ScoreBand.EXCELLENT -> 3
+        ScoreBand.GOOD -> 2
+        ScoreBand.OK -> 1
+        ScoreBand.INCORRECT -> 0
     }
 }
 

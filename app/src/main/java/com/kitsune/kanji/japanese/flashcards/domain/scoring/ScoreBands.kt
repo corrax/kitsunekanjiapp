@@ -2,13 +2,14 @@ package com.kitsune.kanji.japanese.flashcards.domain.scoring
 
 const val SCORE_EXCELLENT_MIN = 80
 const val SCORE_GOOD_MIN = 65
-const val SCORE_ACCEPTABLE_MIN = 45
+const val SCORE_OK_MIN = 45
 const val SCORE_REINFORCEMENT_CUTOFF = 50
+private const val ASSIST_SCORE_REDUCTION_FACTOR = 0.8f
 
 enum class ScoreBand {
     EXCELLENT,
     GOOD,
-    ACCEPTABLE,
+    OK,
     INCORRECT
 }
 
@@ -17,7 +18,7 @@ fun scoreBandFor(score: Int): ScoreBand {
     return when {
         normalized >= SCORE_EXCELLENT_MIN -> ScoreBand.EXCELLENT
         normalized >= SCORE_GOOD_MIN -> ScoreBand.GOOD
-        normalized >= SCORE_ACCEPTABLE_MIN -> ScoreBand.ACCEPTABLE
+        normalized >= SCORE_OK_MIN -> ScoreBand.OK
         else -> ScoreBand.INCORRECT
     }
 }
@@ -26,11 +27,22 @@ fun scoreBandLabel(score: Int): String {
     return when (scoreBandFor(score)) {
         ScoreBand.EXCELLENT -> "Excellent"
         ScoreBand.GOOD -> "Good"
-        ScoreBand.ACCEPTABLE -> "Acceptable"
+        ScoreBand.OK -> "Ok"
         ScoreBand.INCORRECT -> "Incorrect"
     }
 }
 
 fun requiresReinforcement(score: Int): Boolean {
     return score.coerceIn(0, 100) < SCORE_REINFORCEMENT_CUTOFF
+}
+
+fun applyAssistPenalty(score: Int, assistCount: Int): Int {
+    val normalized = score.coerceIn(0, 100)
+    if (assistCount <= 0) return normalized
+    val penalized = (normalized * ASSIST_SCORE_REDUCTION_FACTOR).toInt()
+    return if (normalized >= SCORE_OK_MIN && penalized < SCORE_OK_MIN) {
+        SCORE_OK_MIN
+    } else {
+        penalized.coerceIn(0, 100)
+    }
 }

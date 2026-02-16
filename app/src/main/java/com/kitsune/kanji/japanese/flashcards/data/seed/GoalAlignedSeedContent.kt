@@ -70,6 +70,7 @@ object GoalAlignedSeedContent {
 
     private data class GrammarSeed(
         val prompt: String,
+        val promptFurigana: String? = null,
         val answer: String,
         val choices: List<String>,
         val meaning: String
@@ -77,6 +78,7 @@ object GoalAlignedSeedContent {
 
     private data class ClozeSeed(
         val prompt: String,
+        val promptFurigana: String? = null,
         val answer: String,
         val accepted: List<String>,
         val meaning: String
@@ -84,6 +86,7 @@ object GoalAlignedSeedContent {
 
     private data class SentenceSeed(
         val prompt: String,
+        val promptFurigana: String? = null,
         val answer: String,
         val choices: List<String>,
         val meaning: String
@@ -127,18 +130,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Choose the best connector: Isogashii ( ) ikemasen.",
+                        promptFurigana = "忙{いそが}しい（　）行{い}けません。",
                         answer = "node",
                         choices = listOf("kara", "node", "to", "kedo"),
                         meaning = "reason connector"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Fill blank: Kaigi wa san-ji ( ____ ) hajimarimasu.",
+                        promptFurigana = "会議{かいぎ}は三時{さんじ}（　）始{はじ}まります。",
                         answer = "kara",
                         accepted = listOf("kara"),
                         meaning = "time starting point"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Kaigi wa san-ji kara hajimarimasu.",
+                        promptFurigana = "会議{かいぎ}は三時{さんじ}から始{はじ}まります。",
                         answer = "The meeting starts at 3:00.",
                         choices = listOf(
                             "The meeting starts at 3:00.",
@@ -150,8 +156,10 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build: Today I will prepare the report.",
-                        answer = "kyou wa houkoku o junbi shimasu",
+                        answer = "今日は報告を準備します",
                         accepted = listOf(
+                            "今日は報告を準備します",
+                            "きょうはほうこくをじゅんびします",
                             "kyou wa houkoku o junbi shimasu",
                             "kyou houkoku o junbi shimasu"
                         ),
@@ -187,18 +195,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Kono keikaku wa muzukashii ( ) omou.",
+                        promptFurigana = "この計画{けいかく}は難{むずか}しい（　）思{おも}う。",
                         answer = "to",
                         choices = listOf("ni", "to", "de", "made"),
                         meaning = "quotation marker"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Moshi okureru nara, sugu ( ____ ) kudasai.",
+                        promptFurigana = "もし遅{おく}れるなら、すぐ（　）ください。",
                         answer = "renraku shite",
                         accepted = listOf("renraku shite"),
                         meaning = "request with te-form"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Kekka wa raishuu happyou saremasu.",
+                        promptFurigana = "結果{けっか}は来週{らいしゅう}発表{はっぴょう}されます。",
                         answer = "The results will be announced next week.",
                         choices = listOf(
                             "The results will be announced next week.",
@@ -210,8 +221,11 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build: Please contact me after the meeting.",
-                        answer = "kaigi no ato de renraku shite kudasai",
+                        answer = "会議の後で連絡してください",
                         accepted = listOf(
+                            "会議の後で連絡してください",
+                            "会議の後に連絡してください",
+                            "かいぎのあとでれんらくしてください",
                             "kaigi no ato de renraku shite kudasai",
                             "renraku shite kudasai kaigi no ato de"
                         ),
@@ -247,18 +261,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Sensei no setsumei wa wakariyasui ( ).",
+                        promptFurigana = "先生{せんせい}の説明{せつめい}は分{わ}かりやすい（　）。",
                         answer = "desu",
                         choices = listOf("desu", "ni", "made", "kara"),
                         meaning = "formal statement"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Watashi no iken o ( ____ ) ii desu ka.",
+                        promptFurigana = "私{わたし}の意見{いけん}を（　）いいですか。",
                         answer = "itte mo",
                         accepted = listOf("itte mo"),
                         meaning = "permission pattern"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Kono bun no imi o setsumei shite kudasai.",
+                        promptFurigana = "この文{ぶん}の意味{いみ}を説明{せつめい}してください。",
                         answer = "Please explain the meaning of this sentence.",
                         choices = listOf(
                             "Please explain the meaning of this sentence.",
@@ -270,8 +287,11 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build: I explained my opinion clearly.",
-                        answer = "watashi wa iken o wakariyasuku setsumei shimashita",
+                        answer = "私は意見を分かりやすく説明しました",
                         accepted = listOf(
+                            "私は意見を分かりやすく説明しました",
+                            "意見を分かりやすく説明しました",
+                            "わたしはいけんをわかりやすくせつめいしました",
                             "watashi wa iken o wakariyasuku setsumei shimashita",
                             "iken o wakariyasuku setsumei shimashita"
                         ),
@@ -307,18 +327,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Mada shukudai ga owaranai ( ) nemasen.",
+                        promptFurigana = "まだ宿題{しゅくだい}が終{お}わらない（　）寝{ね}ません。",
                         answer = "node",
                         choices = listOf("node", "made", "to", "dake"),
                         meaning = "cause and effect"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Okureta riyuu o ( ____ ) kudasai.",
+                        promptFurigana = "遅{おく}れた理由{りゆう}を（　）ください。",
                         answer = "oshiete",
                         accepted = listOf("oshiete"),
                         meaning = "te-form request"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Saikin wa densen ga konde imasu.",
+                        promptFurigana = "最近{さいきん}は電車{でんしゃ}が混{こ}んでいます。",
                         answer = "Recently, the train line has been crowded.",
                         choices = listOf(
                             "Recently, the train line has been crowded.",
@@ -330,8 +353,11 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build: Tell me the reason for the delay.",
-                        answer = "chien no riyuu o oshiete kudasai",
+                        answer = "遅延の理由を教えてください",
                         accepted = listOf(
+                            "遅延の理由を教えてください",
+                            "理由を教えてください",
+                            "ちえんのりゆうをおしえてください",
                             "chien no riyuu o oshiete kudasai",
                             "riyuu o oshiete kudasai"
                         ),
@@ -367,18 +393,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Shiken mae wa fukushuu ( ) hou ga ii.",
+                        promptFurigana = "試験前{しけんまえ}は復習{ふくしゅう}（　）ほうがいい。",
                         answer = "shita",
                         choices = listOf("shita", "suru", "shite", "shiyou"),
                         meaning = "advice pattern"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Kono mondai ni kotae o ( ____ ) kudasai.",
+                        promptFurigana = "この問題{もんだい}に答{こた}えを（　）ください。",
                         answer = "kaite",
                         accepted = listOf("kaite"),
                         meaning = "instruction form"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Shiken ni wa jikan kanri ga hitsuyou desu.",
+                        promptFurigana = "試験{しけん}には時間管理{じかんかんり}が必要{ひつよう}です。",
                         answer = "Time management is necessary for the exam.",
                         choices = listOf(
                             "Time management is necessary for the exam.",
@@ -390,8 +419,11 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build: This question is difficult but important.",
-                        answer = "kono mondai wa muzukashii desu ga juuyou desu",
+                        answer = "この問題は難しいですが重要です",
                         accepted = listOf(
+                            "この問題は難しいですが重要です",
+                            "問題は難しいが重要です",
+                            "このもんだいはむずかしいですがじゅうようです",
                             "kono mondai wa muzukashii desu ga juuyou desu",
                             "mondai wa muzukashii ga juuyou desu"
                         ),
@@ -443,18 +475,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Kono houhou wa kouritsu ga ii ( ) omoimasu.",
+                        promptFurigana = "この方法{ほうほう}は効率{こうりつ}がいい（　）思{おも}います。",
                         answer = "to",
                         choices = listOf("to", "de", "ni", "yori"),
                         meaning = "quoted thought"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Shiryou o atsumeru tame ni ( ____ ) hitsuyou ga aru.",
+                        promptFurigana = "資料{しりょう}を集{あつ}めるために（　）必要{ひつよう}がある。",
                         answer = "chousa ga",
                         accepted = listOf("chousa ga"),
                         meaning = "purpose and requirement"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Shigen no setsuyaku ga hitsuyou desu.",
+                        promptFurigana = "資源{しげん}の節約{せつやく}が必要{ひつよう}です。",
                         answer = "Conserving resources is necessary.",
                         choices = listOf(
                             "Conserving resources is necessary.",
@@ -503,18 +538,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Atarashii an o ( ) suru yotei desu.",
+                        promptFurigana = "新{あたら}しい案{あん}を（　）する予定{よてい}です。",
                         answer = "saiyou",
                         choices = listOf("saiyou", "shuuryou", "kakunin", "teian"),
                         meaning = "action selection"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Kono shiryou wa saishin-ban ni ( ____ ) kudasai.",
+                        promptFurigana = "この資料{しりょう}は最新版{さいしんばん}に（　）ください。",
                         answer = "koushin shite",
                         accepted = listOf("koushin shite"),
                         meaning = "update request"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Kaisha wa rainen no saiyou keikaku o happyou shimashita.",
+                        promptFurigana = "会社{かいしゃ}は来年{らいねん}の採用計画{さいようけいかく}を発表{はっぴょう}しました。",
                         answer = "The company announced next year's hiring plan.",
                         choices = listOf(
                             "The company announced next year's hiring plan.",
@@ -563,18 +601,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Kono mondai ni tsuite ( ) shimashou.",
+                        promptFurigana = "この問題{もんだい}について（　）しましょう。",
                         answer = "giron",
                         choices = listOf("giron", "yoyaku", "seiri", "renshuu"),
                         meaning = "discussion vocabulary"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Saigo ni kekka o ( ____ ) houkoku shimasu.",
+                        promptFurigana = "最後{さいご}に結果{けっか}を（　）報告{ほうこく}します。",
                         answer = "matomete",
                         accepted = listOf("matomete"),
                         meaning = "sequence expression"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Chousa no kekka ni motozuite teian o tsukurimasu.",
+                        promptFurigana = "調査{ちょうさ}の結果{けっか}に基{もと}づいて提案{ていあん}を作{つく}ります。",
                         answer = "We will make a proposal based on the survey results.",
                         choices = listOf(
                             "We will make a proposal based on the survey results.",
@@ -623,18 +664,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Toraburu ni sugu ( ) dekiru you ni junbi shite kudasai.",
+                        promptFurigana = "トラブルにすぐ（　）できるように準備{じゅんび}してください。",
                         answer = "taiou",
                         choices = listOf("taiou", "teian", "saiyou", "hyouka"),
                         meaning = "rapid response expression"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Hinshitsu o iji suru tame ni ( ____ ) hitsuyou da.",
+                        promptFurigana = "品質{ひんしつ}を維持{いじ}するために（　）必要{ひつよう}だ。",
                         answer = "kanri ga",
                         accepted = listOf("kanri ga"),
                         meaning = "maintenance condition"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Shisutemu no iji to kanri wa juuyou desu.",
+                        promptFurigana = "システムの維持{いじ}と管理{かんり}は重要{じゅうよう}です。",
                         answer = "System maintenance and management are important.",
                         choices = listOf(
                             "System maintenance and management are important.",
@@ -683,18 +727,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Juyou ga fueru ni tsurete, kyoukyuu mo ( ).",
+                        promptFurigana = "需要{じゅよう}が増{ふ}えるにつれて、供給{きょうきゅう}も（　）。",
                         answer = "hitsuyou ni naru",
                         choices = listOf("hitsuyou ni naru", "yasuku naru", "muzukashiku nai", "owaru"),
                         meaning = "parallel change"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Shijou no henka ni ( ____ ) taiou shinakereba naranai.",
+                        promptFurigana = "市場{しじょう}の変化{へんか}に（　）対応{たいおう}しなければならない。",
                         answer = "awasete",
                         accepted = listOf("awasete"),
                         meaning = "must adapt expression"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Kono purojekuto wa daikibo de, juubun na kanri ga irimasu.",
+                        promptFurigana = "このプロジェクトは大規模{だいきぼ}で、十分{じゅうぶん}な管理{かんり}が要{い}ります。",
                         answer = "This project is large-scale and requires careful management.",
                         choices = listOf(
                             "This project is large-scale and requires careful management.",
@@ -759,18 +806,21 @@ object GoalAlignedSeedContent {
                     ),
                     grammarChoice = GrammarSeed(
                         prompt = "Choose the best request ending: Mite ( )",
+                        promptFurigana = "見{み}て（　）",
                         answer = "kudasai",
                         choices = listOf("kudasai", "mashita", "masen", "deshita"),
                         meaning = "daily polite request"
                     ),
                     grammarCloze = ClozeSeed(
                         prompt = "Fill blank: Mou ichido ( ____ ) kudasai.",
+                        promptFurigana = "もう一度{いちど}（　）ください。",
                         answer = "itte",
                         accepted = listOf("itte"),
                         meaning = "repeat request"
                     ),
                     sentence = SentenceSeed(
                         prompt = "Norikae wa tsugi no eki desu.",
+                        promptFurigana = "乗換{のりか}えは次{つぎ}の駅{えき}です。",
                         answer = "The transfer is at the next station.",
                         choices = listOf(
                             "The transfer is at the next station.",
@@ -811,7 +861,16 @@ object GoalAlignedSeedContent {
             description = "Theme-specific daily life progression from home routines to practical dialogues.",
             accentColor = "#80624D",
             displayOrder = 8,
-            levelTitles = listOf("Home", "School", "Work", "Social", "Real Dialogues"),
+            levelTitles = listOf(
+                "Home",
+                "School",
+                "Work",
+                "Social",
+                "Real Dialogues",
+                "Situational Patterns",
+                "Nuanced Responses",
+                "Advanced Daily Flow"
+            ),
             kanjiPool = listOf(
                 KanjiSeed("\u5bb6", "house"),
                 KanjiSeed("\u90e8", "section"),
@@ -846,7 +905,16 @@ object GoalAlignedSeedContent {
             description = "Theme-specific food progression from ingredients and ordering through menu and dialogue practice.",
             accentColor = "#A86B3D",
             displayOrder = 9,
-            levelTitles = listOf("Ingredients", "Ordering", "Menus", "Cooking Terms", "Food Dialogues"),
+            levelTitles = listOf(
+                "Ingredients",
+                "Ordering",
+                "Menus",
+                "Cooking Terms",
+                "Food Dialogues",
+                "Restaurant Requests",
+                "Nutrition & Preferences",
+                "Service Nuance"
+            ),
             kanjiPool = listOf(
                 KanjiSeed("\u98df", "eat"),
                 KanjiSeed("\u98f2", "drink"),
@@ -881,7 +949,16 @@ object GoalAlignedSeedContent {
             description = "Theme-specific progression for station flow, tickets, routes, warnings, and travel phrases.",
             accentColor = "#5B7891",
             displayOrder = 10,
-            levelTitles = listOf("Stations", "Tickets", "Directions", "Warnings", "Travel Phrases"),
+            levelTitles = listOf(
+                "Stations",
+                "Tickets",
+                "Directions",
+                "Warnings",
+                "Travel Phrases",
+                "Service Disruptions",
+                "Complex Transfers",
+                "Travel Dialogues+"
+            ),
             kanjiPool = listOf(
                 KanjiSeed("\u99c5", "station"),
                 KanjiSeed("\u7dda", "line"),
@@ -916,7 +993,16 @@ object GoalAlignedSeedContent {
             description = "Theme-specific shopping packs covering prices, items, payments, comparisons, and customer dialogues.",
             accentColor = "#7F6756",
             displayOrder = 11,
-            levelTitles = listOf("Numbers", "Items", "Payments", "Comparisons", "Conversations"),
+            levelTitles = listOf(
+                "Numbers",
+                "Items",
+                "Payments",
+                "Comparisons",
+                "Conversations",
+                "Returns & Exchanges",
+                "Price Negotiation",
+                "Customer Scenarios"
+            ),
             kanjiPool = listOf(
                 KanjiSeed("\u5024", "value"),
                 KanjiSeed("\u6570", "number"),
@@ -961,6 +1047,9 @@ object GoalAlignedSeedContent {
             val vocab = cyclicSlice(vocabPool, start = index * 2, count = 2)
             val choiceAnswer = listOf("desu", "masu", "ni", "de", "ka")[index % 5]
             val clozeAnswer = listOf("shite", "mite", "itte", "kudasai", "onegai")[index % 5]
+            val firstTermRuby = furiganaTokenForVocab(vocab[0])
+            val secondTermRuby = furiganaTokenForVocab(vocab[1])
+            val sentenceBuildJapanese = "${vocab[0].term}と${vocab[1].term}をお願いします"
             PackSeed(
                 level = level,
                 title = levelTitle,
@@ -971,19 +1060,22 @@ object GoalAlignedSeedContent {
                     kanji = kanji,
                     vocab = vocab,
                     grammarChoice = GrammarSeed(
-                        prompt = "$levelTitle: choose the best polite connector ( ).",
+                        prompt = "${vocab[0].reading} wa benri ( ).",
+                        promptFurigana = "${firstTermRuby}は便利{べんり}（　）。",
                         answer = choiceAnswer,
                         choices = listOf("desu", "masu", "ni", "de", "ka"),
                         meaning = "$title grammar pattern"
                     ),
                     grammarCloze = ClozeSeed(
-                        prompt = "$levelTitle: complete the request form ( ____ ) kudasai.",
+                        prompt = "${vocab[0].reading} o ( ____ ) kudasai.",
+                        promptFurigana = "${firstTermRuby}を（　）ください。",
                         answer = clozeAnswer,
                         accepted = listOf(clozeAnswer),
                         meaning = "$title request pattern"
                     ),
                     sentence = SentenceSeed(
-                        prompt = "$levelTitle context: ${vocab[0].term} to ${vocab[1].term} ga juuyou desu.",
+                        prompt = "${vocab[0].reading} to ${vocab[1].reading} ga hitsuyou desu.",
+                        promptFurigana = "${firstTermRuby}と${secondTermRuby}が必要{ひつよう}です。",
                         answer = "$levelTitle uses ${vocab[0].meaning} and ${vocab[1].meaning}.",
                         choices = listOf(
                             "$levelTitle uses ${vocab[0].meaning} and ${vocab[1].meaning}.",
@@ -995,10 +1087,12 @@ object GoalAlignedSeedContent {
                     ),
                     sentenceBuild = BuildSeed(
                         prompt = "Build a $levelTitle phrase with theme words.",
-                        answer = "${vocab[0].reading} to ${vocab[1].reading} o onegai shimasu",
+                        answer = sentenceBuildJapanese,
                         accepted = listOf(
+                            sentenceBuildJapanese,
                             "${vocab[0].reading} to ${vocab[1].reading} o onegai shimasu",
-                            "${vocab[0].reading} o onegai shimasu"
+                            "${vocab[0].reading} o onegai shimasu",
+                            "${vocab[0].term}をお願いします"
                         ),
                         meaning = "$title production check"
                     )
@@ -1105,7 +1199,7 @@ object GoalAlignedSeedContent {
             acceptedAnswersRaw = grammarChoice.answer,
             reading = grammarChoice.answer,
             meaning = grammarChoice.meaning,
-            promptFurigana = null,
+            promptFurigana = grammarChoice.promptFurigana,
             choicesRaw = (grammarChoice.choices + grammarChoice.answer).distinct().joinToString("|"),
             difficulty = difficulty,
             templateId = "tmpl_${trackId}_g_${level}_1"
@@ -1118,7 +1212,7 @@ object GoalAlignedSeedContent {
             acceptedAnswersRaw = (grammarCloze.accepted + grammarCloze.answer).distinct().joinToString("|"),
             reading = null,
             meaning = grammarCloze.meaning,
-            promptFurigana = null,
+            promptFurigana = grammarCloze.promptFurigana,
             choicesRaw = null,
             difficulty = difficulty,
             templateId = "tmpl_${trackId}_c_${level}_1"
@@ -1131,7 +1225,7 @@ object GoalAlignedSeedContent {
             acceptedAnswersRaw = sentence.answer,
             reading = null,
             meaning = sentence.meaning,
-            promptFurigana = null,
+            promptFurigana = sentence.promptFurigana,
             choicesRaw = (sentence.choices + sentence.answer).distinct().joinToString("|"),
             difficulty = difficulty,
             templateId = "tmpl_${trackId}_s_${level}_1"
@@ -1232,6 +1326,78 @@ object GoalAlignedSeedContent {
         return strokeCountMap[symbol] ?: ((abs(symbol.hashCode()) % 8) + 5)
     }
 
+    private fun furiganaTokenForVocab(seed: VocabSeed): String {
+        if (!containsKanji(seed.term)) return seed.term
+        val reading = romanizedToHiragana(seed.reading).ifBlank { seed.reading }
+        return "${seed.term}{$reading}"
+    }
+
+    private fun containsKanji(text: String): Boolean {
+        return text.any { character ->
+            Character.UnicodeScript.of(character.code) == Character.UnicodeScript.HAN
+        }
+    }
+
+    private fun romanizedToHiragana(romaji: String): String {
+        val normalized = romaji
+            .lowercase(Locale.US)
+            .replace("-", "")
+            .replace(" ", "")
+        if (normalized.isBlank()) return ""
+        val result = StringBuilder()
+        var index = 0
+        while (index < normalized.length) {
+            val current = normalized[index]
+            val next = normalized.getOrNull(index + 1)
+
+            if (
+                next != null &&
+                current == next &&
+                current in "bcdfghjklmpqrstvwxyz" &&
+                current != 'n'
+            ) {
+                result.append('っ')
+                index += 1
+                continue
+            }
+
+            if (current == 'n') {
+                if (next == null) {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+                if (next == '\'') {
+                    result.append('ん')
+                    index += 2
+                    continue
+                }
+                if (next == 'n') {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+                if (next !in "aeiouy") {
+                    result.append('ん')
+                    index += 1
+                    continue
+                }
+            }
+
+            val kanaEntry = ROMAJI_TO_HIRAGANA.firstOrNull { (latin, _) ->
+                normalized.startsWith(latin, startIndex = index)
+            }
+            if (kanaEntry != null) {
+                result.append(kanaEntry.second)
+                index += kanaEntry.first.length
+            } else {
+                result.append(current)
+                index += 1
+            }
+        }
+        return result.toString()
+    }
+
     private fun buildTemplateStrokePaths(target: String, expectedStrokeCount: Int): String {
         val seed = target.firstOrNull()?.code ?: 0
         return (0 until expectedStrokeCount).joinToString("|") { strokeIndex ->
@@ -1263,6 +1429,36 @@ object GoalAlignedSeedContent {
     private fun format(value: Float): String {
         return String.format(Locale.US, "%.3f", value)
     }
+
+    private val ROMAJI_TO_HIRAGANA = listOf(
+        "kya" to "きゃ", "kyu" to "きゅ", "kyo" to "きょ",
+        "sha" to "しゃ", "shu" to "しゅ", "sho" to "しょ",
+        "cha" to "ちゃ", "chu" to "ちゅ", "cho" to "ちょ",
+        "nya" to "にゃ", "nyu" to "にゅ", "nyo" to "にょ",
+        "hya" to "ひゃ", "hyu" to "ひゅ", "hyo" to "ひょ",
+        "mya" to "みゃ", "myu" to "みゅ", "myo" to "みょ",
+        "rya" to "りゃ", "ryu" to "りゅ", "ryo" to "りょ",
+        "gya" to "ぎゃ", "gyu" to "ぎゅ", "gyo" to "ぎょ",
+        "bya" to "びゃ", "byu" to "びゅ", "byo" to "びょ",
+        "pya" to "ぴゃ", "pyu" to "ぴゅ", "pyo" to "ぴょ",
+        "ja" to "じゃ", "ju" to "じゅ", "jo" to "じょ",
+        "shi" to "し", "chi" to "ち", "tsu" to "つ", "fu" to "ふ",
+        "ka" to "か", "ki" to "き", "ku" to "く", "ke" to "け", "ko" to "こ",
+        "sa" to "さ", "su" to "す", "se" to "せ", "so" to "そ",
+        "ta" to "た", "te" to "て", "to" to "と",
+        "na" to "な", "ni" to "に", "nu" to "ぬ", "ne" to "ね", "no" to "の",
+        "ha" to "は", "hi" to "ひ", "he" to "へ", "ho" to "ほ",
+        "ma" to "ま", "mi" to "み", "mu" to "む", "me" to "め", "mo" to "も",
+        "ya" to "や", "yu" to "ゆ", "yo" to "よ",
+        "ra" to "ら", "ri" to "り", "ru" to "る", "re" to "れ", "ro" to "ろ",
+        "wa" to "わ", "wo" to "を",
+        "ga" to "が", "gi" to "ぎ", "gu" to "ぐ", "ge" to "げ", "go" to "ご",
+        "za" to "ざ", "ji" to "じ", "zu" to "ず", "ze" to "ぜ", "zo" to "ぞ",
+        "da" to "だ", "de" to "で", "do" to "ど",
+        "ba" to "ば", "bi" to "び", "bu" to "ぶ", "be" to "べ", "bo" to "ぼ",
+        "pa" to "ぱ", "pi" to "ぴ", "pu" to "ぷ", "pe" to "ぺ", "po" to "ぽ",
+        "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お"
+    )
 
     private val strokeCountMap = mapOf(
         "\u7d4c" to 11,

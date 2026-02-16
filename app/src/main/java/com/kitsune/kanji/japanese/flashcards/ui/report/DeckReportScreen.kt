@@ -217,14 +217,7 @@ private fun ReportCardItem(card: DeckRunCardReport) {
             color = Color(0xFF6C4E37)
         )
         Text(
-            text = buildString {
-                append("Score: ${card.score ?: 0}/100")
-                card.effectiveScore?.let { effective ->
-                    if (card.score != effective) {
-                        append(" (learning $effective/100)")
-                    }
-                }
-            },
+            text = "Score: ${card.score ?: 0}/100",
             style = MaterialTheme.typography.bodyMedium,
             color = visual.toneColor,
             fontWeight = FontWeight.Medium
@@ -275,7 +268,7 @@ private fun buildShareReportText(report: DeckRunReport): String {
             appendLine("#${card.position} ${card.prompt}")
             appendLine("  Your answer: ${card.userAnswer ?: "(no answer submitted)"}")
             appendLine("  Canonical answer: ${card.canonicalAnswer}")
-            appendLine("  Score: ${card.score ?: 0}/100${card.effectiveScore?.let { if (it != card.score) " (learning $it/100)" else "" } ?: ""}")
+            appendLine("  Score: ${card.score ?: 0}/100")
             appendLine("  Comment: ${card.comment ?: "No comment"}")
         }
     }

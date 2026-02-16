@@ -24,6 +24,9 @@ interface KitsuneDao {
     @Query("SELECT COUNT(*) FROM cards")
     suspend fun countCards(): Int
 
+    @Query("SELECT COUNT(DISTINCT cardId) FROM card_attempts")
+    suspend fun getAttemptedCardCount(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTracks(items: List<TrackEntity>)
 
@@ -229,6 +232,25 @@ interface KitsuneDao {
     )
     suspend fun getActiveDeckRunBySource(deckType: DeckType, sourceId: String): DeckRunEntity?
 
+    @Query(
+        """
+        SELECT dr.sourceId AS sourceId,
+               dr.deckRunId AS deckRunId,
+               COUNT(drc.cardId) AS totalCards,
+               SUM(CASE WHEN drc.resultScore IS NOT NULL THEN 1 ELSE 0 END) AS cardsReviewed
+        FROM deck_runs dr
+        INNER JOIN deck_run_cards drc ON drc.deckRunId = dr.deckRunId
+        WHERE dr.deckType = :deckType
+          AND dr.submittedAtEpochMillis IS NULL
+          AND dr.sourceId IN (:sourceIds)
+        GROUP BY dr.deckRunId
+        """
+    )
+    suspend fun getActiveDeckRunProgressBySources(
+        deckType: DeckType,
+        sourceIds: List<String>
+    ): List<ActiveDeckRunProgressRow>
+
     @Query("SELECT * FROM deck_runs WHERE deckRunId = :deckRunId")
     suspend fun getDeckRun(deckRunId: String): DeckRunEntity?
 
@@ -333,6 +355,7 @@ interface KitsuneDao {
                ca.strokePathsRaw AS strokePathsRaw,
                ca.scoreTotal AS scoreTotal,
                ca.scoreEffective AS scoreEffective,
+               ca.assistCount AS assistCount,
                dr.deckType AS deckType,
                dr.sourceId AS sourceId,
                p.title AS packTitle,
@@ -454,6 +477,7 @@ data class CardAttemptHistoryRow(
     val strokePathsRaw: String?,
     val scoreTotal: Int,
     val scoreEffective: Int,
+    val assistCount: Int,
     val deckType: DeckType,
     val sourceId: String,
     val packTitle: String?,
@@ -467,4 +491,11 @@ data class RetestAttemptContextRow(
     val scoreEffective: Int,
     val deckType: DeckType,
     val sourceId: String
+)
+
+data class ActiveDeckRunProgressRow(
+    val sourceId: String,
+    val deckRunId: String,
+    val cardsReviewed: Int,
+    val totalCards: Int
 )

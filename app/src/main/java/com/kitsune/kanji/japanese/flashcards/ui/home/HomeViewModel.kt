@@ -7,9 +7,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
+import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
-import com.kitsune.kanji.japanese.flashcards.domain.model.PowerUpInventory
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -37,8 +37,8 @@ data class HomeUiState(
         hardWordScore = null
     ),
     val hasStartedDailyChallenge: Boolean = false,
+    val dailyActiveRun: ActiveDeckRunProgress? = null,
     val shouldShowDailyReminder: Boolean = false,
-    val powerUps: List<PowerUpInventory> = emptyList(),
     val packs: List<PackProgress> = emptyList(),
     val lifetimeScore: Int = 0,
     val lifetimeCardsReviewed: Int = 0,
@@ -145,6 +145,7 @@ class HomeViewModel(
                 repository.initialize()
                 repository.getHomeSnapshot(trackId = _uiState.value.selectedTrackId)
             }.onSuccess { snapshot ->
+                val defaultPackId = mostRecentUnlockedPackId(snapshot.packs)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
@@ -154,13 +155,13 @@ class HomeViewModel(
                         bestStreak = snapshot.bestStreak,
                         rankSummary = snapshot.rankSummary,
                         hasStartedDailyChallenge = snapshot.hasStartedDailyChallenge,
+                        dailyActiveRun = snapshot.dailyActiveRun,
                         shouldShowDailyReminder = snapshot.shouldShowDailyReminder,
-                        powerUps = snapshot.powerUps,
                         packs = snapshot.packs,
                         lifetimeScore = snapshot.lifetimeScore,
                         lifetimeCardsReviewed = snapshot.lifetimeCardsReviewed,
                         recentRuns = snapshot.recentRuns,
-                        selectedPackId = it.selectedPackId ?: snapshot.packs.firstOrNull()?.packId
+                        selectedPackId = it.selectedPackId ?: defaultPackId
                     )
                 }
             }.onFailure { error ->
@@ -175,6 +176,14 @@ class HomeViewModel(
     }
 
     companion object {
+        private fun mostRecentUnlockedPackId(packs: List<PackProgress>): String? {
+            val mostRecentUnlocked = packs
+                .filter { it.status != com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus.LOCKED }
+                .maxByOrNull { it.level }
+                ?.packId
+            return mostRecentUnlocked ?: packs.minByOrNull { it.level }?.packId
+        }
+
         fun factory(
             repository: KitsuneRepository,
             deckSelectionPreferences: DeckSelectionPreferences

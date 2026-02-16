@@ -11,9 +11,9 @@ data class HomeSnapshot(
     val currentStreakScore: Int,
     val bestStreak: Int,
     val hasStartedDailyChallenge: Boolean,
+    val dailyActiveRun: ActiveDeckRunProgress?,
     val shouldShowDailyReminder: Boolean,
     val rankSummary: UserRankSummary,
-    val powerUps: List<PowerUpInventory>,
     val packs: List<PackProgress>,
     val lifetimeScore: Int,
     val lifetimeCardsReviewed: Int,
@@ -35,14 +35,14 @@ data class PackProgress(
     val level: Int,
     val title: String,
     val status: PackProgressStatus,
-    val bestExamScore: Int
+    val bestExamScore: Int,
+    val activeRun: ActiveDeckRunProgress?
 )
 
-data class PowerUpInventory(
-    val id: String,
-    val title: String,
-    val count: Int,
-    val description: String
+data class ActiveDeckRunProgress(
+    val deckRunId: String,
+    val cardsReviewed: Int,
+    val totalCards: Int
 )
 
 data class DeckCard(
@@ -159,6 +159,7 @@ data class KanjiAttemptHistoryItem(
     val strokePathsRaw: String?,
     val scoreTotal: Int,
     val scoreEffective: Int,
+    val assistCount: Int,
     val deckType: DeckType,
     val deckLabel: String,
     val attemptedAtEpochMillis: Long

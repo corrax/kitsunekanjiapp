@@ -185,7 +185,6 @@ fun KitsuneRoot() {
                     onDismissDailyReminder = viewModel::dismissDailyReminder,
                     onBrowseDecks = { navController.navigate(routeDeckBrowser) },
                     onOpenSettings = { navController.navigate(routeSettings) },
-                    onOpenProfile = { navController.navigate(routeProfile) },
                     onOpenHistory = { navController.navigate(routeHistory) },
                     onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
                 )
@@ -295,7 +294,8 @@ fun KitsuneRoot() {
                 val viewModel: DeckViewModel = viewModel(
                     factory = DeckViewModel.factory(
                         repository = appContainer.repository,
-                        handwritingScorer = appContainer.handwritingScorer
+                        handwritingScorer = appContainer.handwritingScorer,
+                        onboardingPreferences = appContainer.onboardingPreferences
                     )
                 )
                 LaunchedEffect(deckRunId) {
@@ -315,14 +315,14 @@ fun KitsuneRoot() {
                             requestedAssists = assists
                         )
                     },
-                    onUsePowerUp = viewModel::usePowerUp,
                     onDeckSubmitted = { runId ->
                         navController.navigate("$routeDeckReport/$runId?fromSubmit=true") {
                             popUpTo(routeHome) { inclusive = false }
                             launchSingleTop = true
                         }
                     },
-                    onSubmitDeck = viewModel::submitDeck
+                    onSubmitDeck = viewModel::submitDeck,
+                    onDismissGestureOverlay = viewModel::dismissGestureHelp
                 )
             }
 
