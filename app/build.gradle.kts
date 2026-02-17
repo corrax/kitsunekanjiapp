@@ -12,7 +12,7 @@ android {
         applicationId = "com.kitsune.kanji.japanese.flashcards"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = 5
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -62,7 +62,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.google.billing.ktx)
-    implementation(libs.play.services.ads)
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
 
     ksp(libs.androidx.room.compiler)
