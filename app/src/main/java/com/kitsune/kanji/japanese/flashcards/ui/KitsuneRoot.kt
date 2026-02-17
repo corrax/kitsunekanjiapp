@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -153,11 +154,13 @@ fun KitsuneRoot() {
                 val viewModel: HomeViewModel = viewModel(
                     factory = HomeViewModel.factory(
                         repository = appContainer.repository,
-                        deckSelectionPreferences = appContainer.deckSelectionPreferences
+                        deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                        billingPreferences = appContainer.billingPreferences
                     )
                 )
                 val lifecycleOwner = LocalLifecycleOwner.current
                 val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                val activity = LocalContext.current as? Activity
 
                 DisposableEffect(lifecycleOwner) {
                     val observer = LifecycleEventObserver { _, event ->
@@ -179,8 +182,20 @@ fun KitsuneRoot() {
 
                 HomeScreen(
                     state = state,
-                    onStartDailyDeck = viewModel::startDailyDeck,
-                    onStartExamPack = viewModel::startExamPack,
+                    onStartDailyDeck = {
+                        activity?.let { act ->
+                            appContainer.adManager.showInterstitialBeforeDailyChallenge(act) {
+                                viewModel.startDailyDeck()
+                            }
+                        } ?: viewModel.startDailyDeck()
+                    },
+                    onStartExamPack = { packId ->
+                        activity?.let { act ->
+                            appContainer.adManager.showInterstitialBeforeLevel(act) {
+                                viewModel.startExamPack(packId)
+                            }
+                        } ?: viewModel.startExamPack(packId)
+                    },
                     onSelectPack = viewModel::selectPack,
                     onDismissDailyReminder = viewModel::dismissDailyReminder,
                     onBrowseDecks = { navController.navigate(routeDeckBrowser) },
@@ -198,7 +213,8 @@ fun KitsuneRoot() {
                     viewModelStoreOwner = homeEntry,
                     factory = HomeViewModel.factory(
                         repository = appContainer.repository,
-                        deckSelectionPreferences = appContainer.deckSelectionPreferences
+                        deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                        billingPreferences = appContainer.billingPreferences
                     )
                 )
                 val homeState = homeViewModel.uiState.collectAsStateWithLifecycle().value
@@ -243,7 +259,8 @@ fun KitsuneRoot() {
                     viewModelStoreOwner = homeEntry,
                     factory = HomeViewModel.factory(
                         repository = appContainer.repository,
-                        deckSelectionPreferences = appContainer.deckSelectionPreferences
+                        deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                        billingPreferences = appContainer.billingPreferences
                     )
                 )
                 val homeState = homeViewModel.uiState.collectAsStateWithLifecycle().value

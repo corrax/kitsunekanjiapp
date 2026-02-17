@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.billingPrefsDataStore by preferencesDataStore(name = "billing_prefs")
@@ -49,10 +50,25 @@ class BillingPreferences(private val context: Context) {
         }
     }
 
+    val adsRemovedFlow: Flow<Boolean> =
+        context.billingPrefsDataStore.data.map { prefs ->
+            prefs[KEY_ADS_REMOVED] ?: false
+        }
+
+    suspend fun isAdsRemoved(): Boolean =
+        context.billingPrefsDataStore.data.first()[KEY_ADS_REMOVED] ?: false
+
+    suspend fun setAdsRemoved() {
+        context.billingPrefsDataStore.edit { prefs ->
+            prefs[KEY_ADS_REMOVED] = true
+        }
+    }
+
     companion object {
         private val KEY_IS_PLUS_ENTITLED = booleanPreferencesKey("is_plus_entitled")
         private val KEY_ACTIVE_PLAN_ID = stringPreferencesKey("active_plan_id")
         private val KEY_LAST_PURCHASE_TOKEN = stringPreferencesKey("last_purchase_token")
         private val KEY_UPDATED_AT_EPOCH_MS = longPreferencesKey("updated_at_epoch_ms")
+        private val KEY_ADS_REMOVED = booleanPreferencesKey("ads_removed")
     }
 }

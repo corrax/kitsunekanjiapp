@@ -2,7 +2,10 @@ package com.kitsune.kanji.japanese.flashcards
 
 import android.app.Application
 import androidx.room.Room
+import com.google.android.gms.ads.MobileAds
 import com.kitsune.kanji.japanese.flashcards.data.billing.BillingManager
+import com.kitsune.kanji.japanese.flashcards.BuildConfig
+import com.kitsune.kanji.japanese.flashcards.data.ads.AdManager
 import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DailySchedulePreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
@@ -18,6 +21,9 @@ import com.kitsune.kanji.japanese.flashcards.domain.ink.MlKitHandwritingScorer
 class KitsuneApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.ENABLE_ADS) {
+            MobileAds.initialize(this) {}
+        }
         DailyChallengeNotificationScheduler.schedule(this)
     }
 
@@ -50,6 +56,11 @@ class AppContainer(application: Application) {
     val handwritingScorer: HandwritingScorer = MlKitHandwritingScorer()
     val billingPreferences: BillingPreferences = BillingPreferences(application)
     val billingManager: BillingManager = BillingManager(
+        context = application,
+        billingPreferences = billingPreferences
+    )
+
+    val adManager: AdManager = AdManager(
         context = application,
         billingPreferences = billingPreferences
     )

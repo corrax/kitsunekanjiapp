@@ -46,12 +46,14 @@ data class HomeUiState(
     val selectedPackId: String? = null,
     val selectedDeckThemeId: String = deckThemeCatalog.first().id,
     val selectedTrackId: String = "jlpt_n5_core",
+    val isAdsRemoved: Boolean = false,
     val errorMessage: String? = null
 )
 
 class HomeViewModel(
     private val repository: KitsuneRepository,
-    private val deckSelectionPreferences: DeckSelectionPreferences
+    private val deckSelectionPreferences: DeckSelectionPreferences,
+    private val billingPreferences: com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState = _uiState.asStateFlow()
@@ -64,6 +66,13 @@ class HomeViewModel(
             val savedTheme = deckSelectionPreferences.getSelectedThemeId(deckThemeCatalog.first().id)
             val savedTrackId = deckSelectionPreferences.getSelectedTrackId(defaultTrackId = "jlpt_n5_core")
             _uiState.update { it.copy(selectedDeckThemeId = savedTheme, selectedTrackId = savedTrackId) }
+            
+            launch {
+                billingPreferences.adsRemovedFlow.collect { removed ->
+                    _uiState.update { it.copy(isAdsRemoved = removed) }
+                }
+            }
+            
             loadHome()
         }
     }
@@ -186,12 +195,14 @@ class HomeViewModel(
 
         fun factory(
             repository: KitsuneRepository,
-            deckSelectionPreferences: DeckSelectionPreferences
+            deckSelectionPreferences: DeckSelectionPreferences,
+            billingPreferences: com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 HomeViewModel(
                     repository = repository,
-                    deckSelectionPreferences = deckSelectionPreferences
+                    deckSelectionPreferences = deckSelectionPreferences,
+                    billingPreferences = billingPreferences
                 )
             }
         }

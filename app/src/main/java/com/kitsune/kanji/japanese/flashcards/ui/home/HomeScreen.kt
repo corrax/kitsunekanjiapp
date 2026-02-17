@@ -70,6 +70,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
 import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
+import com.kitsune.kanji.japanese.flashcards.BuildConfig
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeById
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -215,16 +216,18 @@ fun HomeScreen(
                     },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
-                NavigationDrawerItem(
-                    label = { Text("Upgrade") },
-                    icon = { Icon(imageVector = Icons.Filled.WorkspacePremium, contentDescription = null) },
-                    selected = false,
-                    onClick = {
-                        scope.launch { drawerState.close() }
-                        onOpenUpgrade()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
+                if (BuildConfig.ENABLE_ADS && !state.isAdsRemoved) {
+                    NavigationDrawerItem(
+                        label = { Text("Remove Ads") },
+                        icon = { Icon(imageVector = Icons.Filled.WorkspacePremium, contentDescription = null) },
+                        selected = false,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onOpenUpgrade()
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                    )
+                }
             }
         }
     ) {

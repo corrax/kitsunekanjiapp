@@ -16,6 +16,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Set to true after AdMob is approved and you want to show ads + Remove Ads IAP
+        buildConfigField("Boolean", "ENABLE_ADS", "false")
     }
 
     buildTypes {
@@ -34,6 +37,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -58,6 +62,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.google.billing.ktx)
+    implementation(libs.play.services.ads)
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
 
     ksp(libs.androidx.room.compiler)

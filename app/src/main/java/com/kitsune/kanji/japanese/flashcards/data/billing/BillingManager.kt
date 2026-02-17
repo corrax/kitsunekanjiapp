@@ -38,6 +38,8 @@ data class BillingProduct(
 data class BillingUiState(
     val isConnecting: Boolean = true,
     val products: List<BillingProduct> = emptyList(),
+    val removeAdsProduct: BillingProduct? = null,
+    val isAdsRemoved: Boolean = false,
     val entitlement: BillingEntitlement = BillingEntitlement(
         isPlusEntitled = false,
         activePlanId = null,
@@ -68,10 +70,17 @@ class BillingManager(
         )
         .build()
 
+    private val cachedRemoveAdsDetails = mutableMapOf<String, ProductDetails>()
+
     init {
         scope.launch {
             billingPreferences.entitlementFlow.collect { entitlement ->
                 _uiState.value = _uiState.value.copy(entitlement = entitlement)
+            }
+        }
+        scope.launch {
+            billingPreferences.adsRemovedFlow.collect { adsRemoved ->
+                _uiState.value = _uiState.value.copy(isAdsRemoved = adsRemoved)
             }
         }
         connect()
@@ -169,6 +178,63 @@ class BillingManager(
                 products = mapped.sortedBy { planSortKey(it.productId) },
                 message = null
             )
+            queryRemoveAdsProduct()
+        }
+    }
+
+    private fun queryRemoveAdsProduct() {
+        if (!billingClient.isReady) return
+        val productList = listOf(
+            QueryProductDetailsParams.Product.newBuilder()
+                .setProductId(PRODUCT_REMOVE_ADS)
+                .setProductType(ProductType.INAPP)
+                .build()
+        )
+        val params = QueryProductDetailsParams.newBuilder()
+            .setProductList(productList)
+            .build()
+        billingClient.queryProductDetailsAsync(params) { result, productDetails ->
+            if (result.responseCode != BillingResponseCode.OK || productDetails.isEmpty()) {
+                _uiState.value = _uiState.value.copy(removeAdsProduct = null)
+                return@queryProductDetailsAsync
+            }
+            val details = productDetails.first()
+            cachedRemoveAdsDetails[details.productId] = details
+            val oneTimeOffer = details.oneTimePurchaseOfferDetails
+            _uiState.value = _uiState.value.copy(
+                removeAdsProduct = BillingProduct(
+                    productId = details.productId,
+                    title = details.name,
+                    description = details.description,
+                    formattedPrice = oneTimeOffer?.formattedPrice ?: "",
+                    billingPeriodLabel = null,
+                    hasFreeTrial = false,
+                    offerToken = ""
+                )
+            )
+        }
+    }
+
+    fun launchRemoveAdsPurchase(activity: Activity) {
+        if (!billingClient.isReady) {
+            connect()
+            _uiState.value = _uiState.value.copy(message = "Connecting to billing, please try again.")
+            return
+        }
+        val details = cachedRemoveAdsDetails[PRODUCT_REMOVE_ADS]
+        if (details == null) {
+            _uiState.value = _uiState.value.copy(message = "Remove ads is not available right now.")
+            return
+        }
+        val productParams = BillingFlowParams.ProductDetailsParams.newBuilder()
+            .setProductDetails(details)
+            .build()
+        val flowParams = BillingFlowParams.newBuilder()
+            .setProductDetailsParamsList(listOf(productParams))
+            .build()
+        val result = billingClient.launchBillingFlow(activity, flowParams)
+        if (result.responseCode != BillingResponseCode.OK) {
+            _uiState.value = _uiState.value.copy(message = "Could not start purchase: ${result.debugMessage}")
         }
     }
 
@@ -215,10 +281,9 @@ class BillingManager(
             return
         }
 
-        val params = QueryPurchasesParams.newBuilder()
-            .setProductType(ProductType.SUBS)
-            .build()
-        billingClient.queryPurchasesAsync(params) { result, purchases ->
+        billingClient.queryPurchasesAsync(
+            QueryPurchasesParams.newBuilder().setProductType(ProductType.SUBS).build()
+        ) { result, purchases ->
             if (result.responseCode != BillingResponseCode.OK) {
                 _uiState.value = _uiState.value.copy(message = "Purchase restore failed: ${result.debugMessage}")
                 return@queryPurchasesAsync
@@ -231,12 +296,29 @@ class BillingManager(
                 }
             }
         }
+        billingClient.queryPurchasesAsync(
+            QueryPurchasesParams.newBuilder().setProductType(ProductType.INAPP).build()
+        ) { result, purchases ->
+            if (result.responseCode == BillingResponseCode.OK) {
+                scope.launch {
+                    if (purchases.any { it.products.contains(PRODUCT_REMOVE_ADS) }) {
+                        billingPreferences.setAdsRemoved()
+                    }
+                }
+            }
+        }
     }
 
     override fun onPurchasesUpdated(result: BillingResult, purchases: MutableList<Purchase>?) {
         if (result.responseCode == BillingResponseCode.OK && !purchases.isNullOrEmpty()) {
             scope.launch {
-                purchases.forEach { processPurchase(it) }
+                for (purchase in purchases) {
+                    if (purchase.products.contains(PRODUCT_REMOVE_ADS)) {
+                        processRemoveAdsPurchase(purchase)
+                    } else {
+                        processPurchase(purchase)
+                    }
+                }
             }
             return
         }
@@ -269,16 +351,32 @@ class BillingManager(
         _uiState.value = _uiState.value.copy(message = "Purchase successful. Plus is now active.")
     }
 
+    private suspend fun processRemoveAdsPurchase(purchase: Purchase) {
+        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
+        if (!purchase.isAcknowledged) {
+            val params = AcknowledgePurchaseParams.newBuilder()
+                .setPurchaseToken(purchase.purchaseToken)
+                .build()
+            billingClient.acknowledgePurchase(params) {}
+        }
+        billingPreferences.setAdsRemoved()
+        _uiState.value = _uiState.value.copy(message = "Ads removed. Thank you!")
+    }
+
     companion object {
+        const val PRODUCT_REMOVE_ADS = "kitsune_remove_ads"
         const val PRODUCT_PLUS_WEEKLY = "kitsune_plus_weekly"
         const val PRODUCT_PLUS_MONTHLY = "kitsune_plus_monthly"
         const val PRODUCT_PLUS_ANNUAL = "kitsune_plus_annual"
 
+        val PLAN_PRODUCT_IDS = emptyList<String>()
+        /*
         val PLAN_PRODUCT_IDS = listOf(
             PRODUCT_PLUS_WEEKLY,
             PRODUCT_PLUS_MONTHLY,
             PRODUCT_PLUS_ANNUAL
         )
+        */
     }
 
     private fun planSortKey(productId: String): Int {

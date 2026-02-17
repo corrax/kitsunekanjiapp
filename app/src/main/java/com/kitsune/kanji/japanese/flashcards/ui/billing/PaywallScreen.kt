@@ -8,21 +8,27 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -44,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.kitsune.kanji.japanese.flashcards.BuildConfig
 import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.billing.BillingManager
 import com.kitsune.kanji.japanese.flashcards.data.billing.BillingProduct
@@ -106,9 +113,19 @@ fun PaywallScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                IconButton(onClick = onContinueFree) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back"
+                    )
+                }
+            }
             item {
                 Text(
                     text = "Study Smarter With Kitsune Plus",
@@ -133,14 +150,14 @@ fun PaywallScreen(
                 BenefitBullet("Priority review loops and richer assist analytics per card.")
             }
 
-            if (state.products.isEmpty()) {
+            if (state.products.isEmpty() && state.removeAdsProduct == null && !state.isAdsRemoved) {
                 item {
                     Text(
                         text = "Plans are temporarily unavailable. You can continue free and try again later.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
-            } else {
+            } else if (state.products.isNotEmpty()) {
                 items(state.products, key = { it.productId }) { plan ->
                     PlanOptionCard(
                         product = plan,
@@ -150,29 +167,31 @@ fun PaywallScreen(
                 }
             }
 
-            item {
-                Button(
-                    onClick = {
-                        if (activity != null && selectedProduct != null) {
-                            billingManager.launchPurchase(
-                                activity = activity,
-                                productId = selectedProduct.productId,
-                                preferTrialOffer = selectedProduct.hasFreeTrial
-                            )
-                        }
-                    },
-                    enabled = activity != null && selectedProduct != null,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(primaryCtaForPlan(selectedProduct))
+            if (state.products.isNotEmpty()) {
+                item {
+                    Button(
+                        onClick = {
+                            if (activity != null && selectedProduct != null) {
+                                billingManager.launchPurchase(
+                                    activity = activity,
+                                    productId = selectedProduct.productId,
+                                    preferTrialOffer = selectedProduct.hasFreeTrial
+                                )
+                            }
+                        },
+                        enabled = activity != null && selectedProduct != null,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(primaryCtaForPlan(selectedProduct))
+                    }
                 }
-            }
-            item {
-                Text(
-                    text = ctaSupportForPlan(selectedProduct),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                item {
+                    Text(
+                        text = ctaSupportForPlan(selectedProduct),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
             }
             item {
                 OutlinedButton(
@@ -180,6 +199,31 @@ fun PaywallScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Restore Purchases")
+                }
+            }
+            if (BuildConfig.ENABLE_ADS) {
+                item {
+                    if (state.isAdsRemoved) {
+                        Text(
+                            text = "Ads removed — thank you!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.Medium
+                        )
+                    } else {
+                        state.removeAdsProduct?.let { removeAdsProduct ->
+                            OutlinedButton(
+                                onClick = {
+                                    if (activity != null) {
+                                        billingManager.launchRemoveAdsPurchase(activity)
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Remove ads forever — ${removeAdsProduct.formattedPrice}")
+                            }
+                        }
+                    }
                 }
             }
             item {
