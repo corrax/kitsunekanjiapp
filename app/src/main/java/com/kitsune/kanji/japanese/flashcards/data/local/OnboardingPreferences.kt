@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 private val Context.userPrefsDataStore by preferencesDataStore(name = "user_prefs")
 
 enum class LearnerLevel {
+    PRE_N5,
     BEGINNER_N5,
     BEGINNER_PLUS_N4,
     INTERMEDIATE_N3,

@@ -16,6 +16,7 @@ object GoalAlignedSeedContent {
     const val dailyChallengeTrackId = "daily_challenge_core"
 
     fun build(): SeedBundle {
+        val foundations = buildFoundationsTrack()
         val n4 = buildJlptN4Track()
         val n3 = buildJlptN3Track()
         val daily = buildDailyChallengeTrack()
@@ -23,21 +24,14 @@ object GoalAlignedSeedContent {
         val food = buildFoodTrack()
         val transport = buildTransportTrack()
         val shopping = buildShoppingTrack()
+        val all = listOf(foundations, n4, n3, daily, dailyLife, food, transport, shopping)
         return SeedBundle(
-            tracks = listOf(
-                n4.track,
-                n3.track,
-                daily.track,
-                dailyLife.track,
-                food.track,
-                transport.track,
-                shopping.track
-            ),
-            packs = n4.packs + n3.packs + daily.packs + dailyLife.packs + food.packs + transport.packs + shopping.packs,
-            cards = n4.cards + n3.cards + daily.cards + dailyLife.cards + food.cards + transport.cards + shopping.cards,
-            templates = n4.templates + n3.templates + daily.templates + dailyLife.templates + food.templates + transport.templates + shopping.templates,
-            packCards = n4.packCards + n3.packCards + daily.packCards + dailyLife.packCards + food.packCards + transport.packCards + shopping.packCards,
-            progress = n4.progress + n3.progress + daily.progress + dailyLife.progress + food.progress + transport.progress + shopping.progress
+            tracks = all.map { it.track },
+            packs = all.flatMap { it.packs },
+            cards = all.flatMap { it.cards },
+            templates = all.flatMap { it.templates },
+            packCards = all.flatMap { it.packCards },
+            progress = all.flatMap { it.progress }
         )
     }
 
@@ -98,6 +92,162 @@ object GoalAlignedSeedContent {
         val accepted: List<String>,
         val meaning: String
     )
+
+    private data class FoundationsVocab(
+        val term: String,
+        val reading: String,
+        val meaning: String,
+        val choices: List<String>
+    )
+
+    private data class FoundationsKanji(
+        val symbol: String,
+        val reading: String,
+        val meaning: String,
+        val readingChoices: List<String>
+    )
+
+    private fun buildFoundationsTrack(): TrackSeed {
+        val trackId = "foundations"
+
+        // Pack 1: Greetings & Basics (difficulty 0)
+        val pack1Vocab = listOf(
+            FoundationsVocab("こんにちは", "konnichiwa", "hello",
+                listOf("hello", "goodbye", "thank you", "excuse me")),
+            FoundationsVocab("ありがとう", "arigatou", "thank you",
+                listOf("sorry", "thank you", "good morning", "goodbye")),
+            FoundationsVocab("すみません", "sumimasen", "excuse me",
+                listOf("excuse me", "hello", "please", "goodbye")),
+            FoundationsVocab("おはよう", "ohayou", "good morning",
+                listOf("good evening", "good night", "good morning", "good afternoon"))
+        )
+        val pack1Kanji = listOf(
+            FoundationsKanji("日", "nichi", "day/sun",
+                listOf("nichi", "getsu", "ka", "sui")),
+            FoundationsKanji("人", "hito", "person",
+                listOf("hito", "yama", "kawa", "ki"))
+        )
+
+        // Pack 2: Numbers & Counting (difficulty 0)
+        val pack2Vocab = listOf(
+            FoundationsVocab("一つ", "hitotsu", "one (thing)",
+                listOf("one (thing)", "two (things)", "three (things)", "five (things)")),
+            FoundationsVocab("二つ", "futatsu", "two (things)",
+                listOf("one (thing)", "two (things)", "four (things)", "ten (things)")),
+            FoundationsVocab("三つ", "mittsu", "three (things)",
+                listOf("three (things)", "six (things)", "two (things)", "nine (things)")),
+            FoundationsVocab("五つ", "itsutsu", "five (things)",
+                listOf("four (things)", "five (things)", "seven (things)", "eight (things)"))
+        )
+        val pack2Kanji = listOf(
+            FoundationsKanji("一", "ichi", "one",
+                listOf("ichi", "ni", "san", "go")),
+            FoundationsKanji("十", "juu", "ten",
+                listOf("juu", "hyaku", "sen", "man"))
+        )
+
+        // Pack 3: Self & Others (difficulty 1)
+        val pack3Vocab = listOf(
+            FoundationsVocab("わたし", "watashi", "I/me",
+                listOf("I/me", "you", "he/she", "we")),
+            FoundationsVocab("あなた", "anata", "you",
+                listOf("I/me", "you", "they", "everyone")),
+            FoundationsVocab("名前", "namae", "name",
+                listOf("name", "age", "place", "word")),
+            FoundationsVocab("友達", "tomodachi", "friend",
+                listOf("teacher", "student", "friend", "family"))
+        )
+        val pack3Kanji = listOf(
+            FoundationsKanji("名", "na", "name",
+                listOf("na", "mae", "ato", "ue")),
+            FoundationsKanji("前", "mae", "before/front",
+                listOf("mae", "ushiro", "naka", "soto"))
+        )
+
+        // Pack 4: Places & Things (difficulty 1)
+        val pack4Vocab = listOf(
+            FoundationsVocab("学校", "gakkou", "school",
+                listOf("school", "house", "store", "park")),
+            FoundationsVocab("家", "ie", "house",
+                listOf("station", "house", "hospital", "library")),
+            FoundationsVocab("水", "mizu", "water",
+                listOf("water", "fire", "tea", "milk")),
+            FoundationsVocab("本", "hon", "book",
+                listOf("pen", "desk", "book", "chair"))
+        )
+        val pack4Kanji = listOf(
+            FoundationsKanji("学", "gaku", "study",
+                listOf("gaku", "kou", "sei", "shi")),
+            FoundationsKanji("水", "sui", "water",
+                listOf("sui", "ka", "moku", "kin"))
+        )
+
+        data class FoundationsPack(
+            val level: Int,
+            val title: String,
+            val difficulty: Int,
+            val vocab: List<FoundationsVocab>,
+            val kanji: List<FoundationsKanji>
+        )
+
+        val packDefs = listOf(
+            FoundationsPack(1, "Greetings & Basics", 0, pack1Vocab, pack1Kanji),
+            FoundationsPack(2, "Numbers & Counting", 0, pack2Vocab, pack2Kanji),
+            FoundationsPack(3, "Self & Others", 1, pack3Vocab, pack3Kanji),
+            FoundationsPack(4, "Places & Things", 1, pack4Vocab, pack4Kanji)
+        )
+
+        val packs = packDefs.map { def ->
+            val vocabCards = def.vocab.mapIndexed { index, v ->
+                val cardId = "${trackId}_v_${def.level}_${index + 1}"
+                CardEntity(
+                    cardId = cardId,
+                    type = CardType.VOCAB_READING,
+                    prompt = v.term,
+                    canonicalAnswer = v.meaning,
+                    acceptedAnswersRaw = listOf(v.meaning, v.meaning.lowercase(Locale.US)).distinct().joinToString("|"),
+                    reading = v.reading,
+                    meaning = v.meaning,
+                    promptFurigana = null,
+                    choicesRaw = (v.choices + v.meaning).distinct().joinToString("|"),
+                    difficulty = def.difficulty,
+                    templateId = "tmpl_$cardId"
+                )
+            }
+            val kanjiCards = def.kanji.mapIndexed { index, k ->
+                val cardId = "${trackId}_r_${def.level}_${index + 1}"
+                CardEntity(
+                    cardId = cardId,
+                    type = CardType.KANJI_READING,
+                    prompt = k.symbol,
+                    canonicalAnswer = k.reading,
+                    acceptedAnswersRaw = k.reading,
+                    reading = k.reading,
+                    meaning = k.meaning,
+                    promptFurigana = null,
+                    choicesRaw = (k.readingChoices + k.reading).distinct().joinToString("|"),
+                    difficulty = def.difficulty,
+                    templateId = "tmpl_$cardId"
+                )
+            }
+            PackSeed(
+                level = def.level,
+                title = def.title,
+                cards = vocabCards + kanjiCards
+            )
+        }
+
+        return buildTrack(
+            trackId = trackId,
+            title = "Foundations",
+            description = "Start here — greetings, numbers, and everyday words with no writing required.",
+            accentColor = "#4CAF50",
+            displayOrder = 0,
+            minTotalScore = 70,
+            minHandwritingScore = 0,
+            packs = packs
+        )
+    }
 
     private fun buildJlptN4Track(): TrackSeed {
         val trackId = "jlpt_n4_core"
@@ -881,7 +1031,11 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u53cb", "friend"),
                 KanjiSeed("\u8a71", "talk"),
                 KanjiSeed("\u4f4f", "live"),
-                KanjiSeed("\u65cf", "family")
+                KanjiSeed("\u65cf", "family"),
+                KanjiSeed("\u96fb", "electricity"),
+                KanjiSeed("\u5929", "sky"),
+                KanjiSeed("\u4f11", "rest"),
+                KanjiSeed("\u6b69", "walk")
             ),
             vocabPool = listOf(
                 VocabSeed("\u53f0\u6240", "daidokoro", "kitchen", listOf("kitchen", "station", "office", "menu")),
@@ -893,7 +1047,12 @@ object GoalAlignedSeedContent {
                 VocabSeed("\u7d04\u675f", "yakusoku", "promise", listOf("promise", "total", "route", "salad")),
                 VocabSeed("\u4f1a\u8a71", "kaiwa", "conversation", listOf("conversation", "change", "kitchen", "deadline")),
                 VocabSeed("\u652f\u5ea6", "shitaku", "getting ready", listOf("getting ready", "line", "stock", "invoice")),
-                VocabSeed("\u5e30\u5b85", "kitaku", "returning home", listOf("returning home", "checkout", "meeting", "station"))
+                VocabSeed("\u5e30\u5b85", "kitaku", "returning home", listOf("returning home", "checkout", "meeting", "station")),
+                VocabSeed("\u8cb7\u3044\u7269", "kaimono", "shopping", listOf("shopping", "cooking", "travel", "homework")),
+                VocabSeed("\u96fb\u8a71", "denwa", "telephone", listOf("telephone", "television", "transfer", "ticket")),
+                VocabSeed("\u5929\u6c17", "tenki", "weather", listOf("weather", "promise", "direction", "price")),
+                VocabSeed("\u4f11\u307f", "yasumi", "holiday", listOf("holiday", "cleaning", "lesson", "ingredient")),
+                VocabSeed("\u6563\u6b69", "sanpo", "walk", listOf("walk", "meeting", "payment", "route"))
             )
         )
     }
@@ -925,7 +1084,11 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u8089", "meat"),
                 KanjiSeed("\u9b5a", "fish"),
                 KanjiSeed("\u8336", "tea"),
-                KanjiSeed("\u5e97", "shop")
+                KanjiSeed("\u5e97", "shop"),
+                KanjiSeed("\u91ce", "field"),
+                KanjiSeed("\u679c", "fruit"),
+                KanjiSeed("\u5f01", "valve/bento"),
+                KanjiSeed("\u751f", "raw/fresh")
             ),
             vocabPool = listOf(
                 VocabSeed("\u98df\u6750", "shokuzai", "ingredients", listOf("ingredients", "route", "ticket", "desk")),
@@ -937,7 +1100,12 @@ object GoalAlignedSeedContent {
                 VocabSeed("\u8f9b\u53e3", "karakuchi", "spicy", listOf("spicy", "cheap", "boarding", "change")),
                 VocabSeed("\u8abf\u7406", "chouri", "cooking", listOf("cooking", "route", "checkout", "station")),
                 VocabSeed("\u624b\u9806", "tejun", "steps", listOf("steps", "fare", "delivery", "platform")),
-                VocabSeed("\u4f1a\u8a08", "kaikei", "checkout", listOf("checkout", "class", "transfer", "menu"))
+                VocabSeed("\u4f1a\u8a08", "kaikei", "checkout", listOf("checkout", "class", "transfer", "menu")),
+                VocabSeed("\u91ce\u83dc", "yasai", "vegetables", listOf("vegetables", "station", "promise", "receipt")),
+                VocabSeed("\u679c\u7269", "kudamono", "fruit", listOf("fruit", "cleaning", "ticket", "meeting")),
+                VocabSeed("\u30c7\u30b6\u30fc\u30c8", "dezaato", "dessert", listOf("dessert", "direction", "payment", "homework")),
+                VocabSeed("\u5f01\u5f53", "bentou", "bento", listOf("bento", "kitchen", "laundry", "route")),
+                VocabSeed("\u30e1\u30cb\u30e5\u30fc", "menyuu", "menu", listOf("menu", "stock", "fare", "plan"))
             )
         )
     }
@@ -969,7 +1137,11 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u964d", "get off"),
                 KanjiSeed("\u901f", "fast"),
                 KanjiSeed("\u9045", "late"),
-                KanjiSeed("\u8eca", "vehicle")
+                KanjiSeed("\u8eca", "vehicle"),
+                KanjiSeed("\u98db", "fly"),
+                KanjiSeed("\u51fa", "exit"),
+                KanjiSeed("\u5165", "enter"),
+                KanjiSeed("\u523b", "engrave/time")
             ),
             vocabPool = listOf(
                 VocabSeed("\u6539\u672d", "kaisatsu", "ticket gate", listOf("ticket gate", "menu", "discount", "assignment")),
@@ -981,7 +1153,12 @@ object GoalAlignedSeedContent {
                 VocabSeed("\u7d42\u70b9", "shuuten", "terminal", listOf("terminal", "payment", "set meal", "submission")),
                 VocabSeed("\u4e57\u8eca", "jousha", "boarding", listOf("boarding", "lesson", "laundry", "discount")),
                 VocabSeed("\u4e0b\u8eca", "gesha", "getting off", listOf("getting off", "inventory", "conversation", "kitchen")),
-                VocabSeed("\u9045\u5ef6", "chien", "delay", listOf("delay", "entryway", "sweets", "report"))
+                VocabSeed("\u9045\u5ef6", "chien", "delay", listOf("delay", "entryway", "sweets", "report")),
+                VocabSeed("\u30d0\u30b9", "basu", "bus", listOf("bus", "train", "taxi", "bicycle")),
+                VocabSeed("\u98db\u884c\u6a5f", "hikouki", "airplane", listOf("airplane", "ticket", "station", "platform")),
+                VocabSeed("\u51fa\u53e3", "deguchi", "exit", listOf("exit", "entrance", "ticket gate", "platform")),
+                VocabSeed("\u5165\u53e3", "iriguchi", "entrance", listOf("entrance", "exit", "fare", "delay")),
+                VocabSeed("\u6642\u523b\u8868", "jikokuhyou", "timetable", listOf("timetable", "receipt", "menu", "plan"))
             )
         )
     }
@@ -1013,7 +1190,11 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u9ad8", "high"),
                 KanjiSeed("\u6bd4", "compare"),
                 KanjiSeed("\u6255", "pay"),
-                KanjiSeed("\u5ba2", "customer")
+                KanjiSeed("\u5ba2", "customer"),
+                KanjiSeed("\u888b", "bag"),
+                KanjiSeed("\u58f2", "sell"),
+                KanjiSeed("\u8cb7", "buy"),
+                KanjiSeed("\u9818", "receipt/territory")
             ),
             vocabPool = listOf(
                 VocabSeed("\u4fa1\u683c", "kakaku", "price", listOf("price", "station line", "dish", "class")),
@@ -1025,7 +1206,12 @@ object GoalAlignedSeedContent {
                 VocabSeed("\u8fd4\u54c1", "henpin", "return", listOf("return", "kitchen", "route", "station")),
                 VocabSeed("\u4ea4\u63db", "koukan", "exchange", listOf("exchange", "lesson", "laundry", "topic")),
                 VocabSeed("\u63a5\u5ba2", "sekkyaku", "customer service", listOf("customer service", "line", "ticket", "menu")),
-                VocabSeed("\u8a66\u7740", "shichaku", "fitting", listOf("fitting", "receipt", "meeting", "entryway"))
+                VocabSeed("\u8a66\u7740", "shichaku", "fitting", listOf("fitting", "receipt", "meeting", "entryway")),
+                VocabSeed("\u30b5\u30a4\u30ba", "saizu", "size", listOf("size", "color", "price", "weight")),
+                VocabSeed("\u30ec\u30b8", "reji", "register", listOf("register", "exit", "gate", "counter")),
+                VocabSeed("\u888b", "fukuro", "bag", listOf("bag", "box", "plate", "cup")),
+                VocabSeed("\u9818\u53ce\u66f8", "ryoushuusho", "receipt", listOf("receipt", "ticket", "menu", "invoice")),
+                VocabSeed("\u30bb\u30fc\u30eb", "seeru", "sale", listOf("sale", "return", "exchange", "stock"))
             )
         )
     }
@@ -1130,22 +1316,7 @@ object GoalAlignedSeedContent {
         sentenceBuild: BuildSeed
     ): List<CardEntity> {
         val cards = mutableListOf<CardEntity>()
-        cards += kanji.mapIndexed { index, seed ->
-            val cardId = "${trackId}_k_${level}_${index + 1}"
-            CardEntity(
-                cardId = cardId,
-                type = CardType.KANJI_WRITE,
-                prompt = "Write the kanji: ${seed.meaning}",
-                canonicalAnswer = seed.symbol,
-                acceptedAnswersRaw = seed.symbol,
-                reading = null,
-                meaning = seed.meaning,
-                promptFurigana = null,
-                choicesRaw = null,
-                difficulty = difficulty,
-                templateId = "tmpl_$cardId"
-            )
-        }
+        // VOCAB_READING — always included (recognition)
         cards += vocab.mapIndexed { index, seed ->
             val cardId = "${trackId}_v_${level}_${index + 1}"
             val answer = seed.meaning.trim()
@@ -1165,84 +1336,118 @@ object GoalAlignedSeedContent {
                 templateId = "tmpl_$cardId"
             )
         }
-        val kanjiReadingAnswer = vocab.firstOrNull()?.reading?.trim().orEmpty()
-        if (kanjiReadingAnswer.isNotBlank() && kanji.isNotEmpty()) {
-            val readingPool = (
-                vocab.map { it.reading.trim() } +
-                    listOf("desu", "masu", "kudasai", "ka")
+        // KANJI_WRITE — difficulty 2+ (production)
+        if (difficulty >= 2) {
+            cards += kanji.mapIndexed { index, seed ->
+                val cardId = "${trackId}_k_${level}_${index + 1}"
+                CardEntity(
+                    cardId = cardId,
+                    type = CardType.KANJI_WRITE,
+                    prompt = "Write the kanji: ${seed.meaning}",
+                    canonicalAnswer = seed.symbol,
+                    acceptedAnswersRaw = seed.symbol,
+                    reading = null,
+                    meaning = seed.meaning,
+                    promptFurigana = null,
+                    choicesRaw = null,
+                    difficulty = difficulty,
+                    templateId = "tmpl_$cardId"
                 )
-                .filter { it.isNotBlank() }
-                .distinct()
-            val readingChoices = (readingPool.shuffled(Random(trackId.hashCode() + level)).take(3) + kanjiReadingAnswer)
-                .distinct()
-                .shuffled(Random((trackId.hashCode() xor level) + 17))
+            }
+        }
+        // KANJI_READING — difficulty 2+ (reading recognition)
+        if (difficulty >= 2) {
+            val kanjiReadingAnswer = vocab.firstOrNull()?.reading?.trim().orEmpty()
+            if (kanjiReadingAnswer.isNotBlank() && kanji.isNotEmpty()) {
+                val readingPool = (
+                    vocab.map { it.reading.trim() } +
+                        listOf("desu", "masu", "kudasai", "ka")
+                    )
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val readingChoices = (readingPool.shuffled(Random(trackId.hashCode() + level)).take(3) + kanjiReadingAnswer)
+                    .distinct()
+                    .shuffled(Random((trackId.hashCode() xor level) + 17))
+                cards += CardEntity(
+                    cardId = "${trackId}_r_${level}_1",
+                    type = CardType.KANJI_READING,
+                    prompt = kanji.first().symbol,
+                    canonicalAnswer = kanjiReadingAnswer,
+                    acceptedAnswersRaw = listOf(kanjiReadingAnswer, kanjiReadingAnswer.lowercase(Locale.US)).distinct()
+                        .joinToString("|"),
+                    reading = kanjiReadingAnswer,
+                    meaning = "kanji reading",
+                    promptFurigana = null,
+                    choicesRaw = readingChoices.joinToString("|"),
+                    difficulty = difficulty,
+                    templateId = "tmpl_${trackId}_r_${level}_1"
+                )
+            }
+        }
+        // GRAMMAR_CHOICE — difficulty 2+ (grammar recognition)
+        if (difficulty >= 2) {
             cards += CardEntity(
-                cardId = "${trackId}_r_${level}_1",
-                type = CardType.KANJI_READING,
-                prompt = kanji.first().symbol,
-                canonicalAnswer = kanjiReadingAnswer,
-                acceptedAnswersRaw = listOf(kanjiReadingAnswer, kanjiReadingAnswer.lowercase(Locale.US)).distinct()
-                    .joinToString("|"),
-                reading = kanjiReadingAnswer,
-                meaning = "kanji reading",
-                promptFurigana = null,
-                choicesRaw = readingChoices.joinToString("|"),
+                cardId = "${trackId}_g_${level}_1",
+                type = CardType.GRAMMAR_CHOICE,
+                prompt = grammarChoice.prompt,
+                canonicalAnswer = grammarChoice.answer,
+                acceptedAnswersRaw = grammarChoice.answer,
+                reading = grammarChoice.answer,
+                meaning = grammarChoice.meaning,
+                promptFurigana = grammarChoice.promptFurigana,
+                choicesRaw = (grammarChoice.choices + grammarChoice.answer).distinct().joinToString("|"),
                 difficulty = difficulty,
-                templateId = "tmpl_${trackId}_r_${level}_1"
+                templateId = "tmpl_${trackId}_g_${level}_1"
             )
         }
-        cards += CardEntity(
-            cardId = "${trackId}_g_${level}_1",
-            type = CardType.GRAMMAR_CHOICE,
-            prompt = grammarChoice.prompt,
-            canonicalAnswer = grammarChoice.answer,
-            acceptedAnswersRaw = grammarChoice.answer,
-            reading = grammarChoice.answer,
-            meaning = grammarChoice.meaning,
-            promptFurigana = grammarChoice.promptFurigana,
-            choicesRaw = (grammarChoice.choices + grammarChoice.answer).distinct().joinToString("|"),
-            difficulty = difficulty,
-            templateId = "tmpl_${trackId}_g_${level}_1"
-        )
-        cards += CardEntity(
-            cardId = "${trackId}_c_${level}_1",
-            type = CardType.GRAMMAR_CLOZE_WRITE,
-            prompt = grammarCloze.prompt,
-            canonicalAnswer = grammarCloze.answer,
-            acceptedAnswersRaw = (grammarCloze.accepted + grammarCloze.answer).distinct().joinToString("|"),
-            reading = null,
-            meaning = grammarCloze.meaning,
-            promptFurigana = grammarCloze.promptFurigana,
-            choicesRaw = null,
-            difficulty = difficulty,
-            templateId = "tmpl_${trackId}_c_${level}_1"
-        )
-        cards += CardEntity(
-            cardId = "${trackId}_s_${level}_1",
-            type = CardType.SENTENCE_COMPREHENSION,
-            prompt = sentence.prompt,
-            canonicalAnswer = sentence.answer,
-            acceptedAnswersRaw = sentence.answer,
-            reading = null,
-            meaning = sentence.meaning,
-            promptFurigana = sentence.promptFurigana,
-            choicesRaw = (sentence.choices + sentence.answer).distinct().joinToString("|"),
-            difficulty = difficulty,
-            templateId = "tmpl_${trackId}_s_${level}_1"
-        )
-        cards += CardEntity(
-            cardId = "${trackId}_b_${level}_1",
-            type = CardType.SENTENCE_BUILD,
-            prompt = sentenceBuild.prompt,
-            canonicalAnswer = sentenceBuild.answer,
-            acceptedAnswersRaw = (sentenceBuild.accepted + sentenceBuild.answer).distinct().joinToString("|"),
-            reading = null,
-            meaning = sentenceBuild.meaning,
-            promptFurigana = null,
-            choicesRaw = null,
-            difficulty = difficulty,
-            templateId = "tmpl_${trackId}_b_${level}_1"
-        )
+        // GRAMMAR_CLOZE_WRITE — difficulty 4+ (grammar production)
+        if (difficulty >= 4) {
+            cards += CardEntity(
+                cardId = "${trackId}_c_${level}_1",
+                type = CardType.GRAMMAR_CLOZE_WRITE,
+                prompt = grammarCloze.prompt,
+                canonicalAnswer = grammarCloze.answer,
+                acceptedAnswersRaw = (grammarCloze.accepted + grammarCloze.answer).distinct().joinToString("|"),
+                reading = null,
+                meaning = grammarCloze.meaning,
+                promptFurigana = grammarCloze.promptFurigana,
+                choicesRaw = null,
+                difficulty = difficulty,
+                templateId = "tmpl_${trackId}_c_${level}_1"
+            )
+        }
+        // SENTENCE_COMPREHENSION — difficulty 6+ (sentence-level understanding)
+        if (difficulty >= 6) {
+            cards += CardEntity(
+                cardId = "${trackId}_s_${level}_1",
+                type = CardType.SENTENCE_COMPREHENSION,
+                prompt = sentence.prompt,
+                canonicalAnswer = sentence.answer,
+                acceptedAnswersRaw = sentence.answer,
+                reading = null,
+                meaning = sentence.meaning,
+                promptFurigana = sentence.promptFurigana,
+                choicesRaw = (sentence.choices + sentence.answer).distinct().joinToString("|"),
+                difficulty = difficulty,
+                templateId = "tmpl_${trackId}_s_${level}_1"
+            )
+        }
+        // SENTENCE_BUILD — difficulty 6+ (sentence production)
+        if (difficulty >= 6) {
+            cards += CardEntity(
+                cardId = "${trackId}_b_${level}_1",
+                type = CardType.SENTENCE_BUILD,
+                prompt = sentenceBuild.prompt,
+                canonicalAnswer = sentenceBuild.answer,
+                acceptedAnswersRaw = (sentenceBuild.accepted + sentenceBuild.answer).distinct().joinToString("|"),
+                reading = null,
+                meaning = sentenceBuild.meaning,
+                promptFurigana = null,
+                choicesRaw = null,
+                difficulty = difficulty,
+                templateId = "tmpl_${trackId}_b_${level}_1"
+            )
+        }
         return cards
     }
 

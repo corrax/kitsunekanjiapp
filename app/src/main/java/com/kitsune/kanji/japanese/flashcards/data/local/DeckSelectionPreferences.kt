@@ -3,6 +3,7 @@ package com.kitsune.kanji.japanese.flashcards.data.local
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.first
 
@@ -31,8 +32,20 @@ class DeckSelectionPreferences(private val context: Context) {
         }
     }
 
+    suspend fun getSelectedTopicTrackIds(): Set<String> {
+        val prefs = context.deckSelectionDataStore.data.first()
+        return prefs[KEY_SELECTED_TOPIC_TRACK_IDS] ?: emptySet()
+    }
+
+    suspend fun setSelectedTopicTrackIds(trackIds: Set<String>) {
+        context.deckSelectionDataStore.edit { prefs ->
+            prefs[KEY_SELECTED_TOPIC_TRACK_IDS] = trackIds
+        }
+    }
+
     companion object {
         private val KEY_SELECTED_THEME_ID = stringPreferencesKey("selected_deck_theme_id")
         private val KEY_SELECTED_TRACK_ID = stringPreferencesKey("selected_deck_track_id")
+        private val KEY_SELECTED_TOPIC_TRACK_IDS = stringSetPreferencesKey("selected_topic_track_ids")
     }
 }

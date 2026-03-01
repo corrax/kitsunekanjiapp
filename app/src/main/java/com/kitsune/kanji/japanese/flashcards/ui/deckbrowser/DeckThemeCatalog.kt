@@ -20,6 +20,20 @@ data class DeckLevelOption(
 
 val deckThemeCatalog = listOf(
     DeckThemeOption(
+        "foundations",
+        "Foundations",
+        "Pre-N5",
+        "Beginner",
+        R.drawable.hero_spring,
+        contentTrackId = "foundations",
+        levels = listOf(
+            DeckLevelOption(1, "Greetings & Basics"),
+            DeckLevelOption(2, "Numbers & Counting"),
+            DeckLevelOption(3, "Self & Others"),
+            DeckLevelOption(4, "Places & Things")
+        )
+    ),
+    DeckThemeOption(
         "jlpt_n5",
         "JLPT N5 Core",
         "Beginner",

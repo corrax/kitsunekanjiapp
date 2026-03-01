@@ -98,6 +98,21 @@ class DeckViewModel(
         loadDeck(deckRunId)
     }
 
+    fun autoInitialize(trackId: String) {
+        if (deckRunId != null && _uiState.value.session != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            runCatching {
+                repository.initialize()
+                repository.createOrLoadDailyDeck(trackId)
+            }.onSuccess { deck ->
+                initialize(deck.deckRunId)
+            }.onFailure { error ->
+                _uiState.update { it.copy(isLoading = false, errorMessage = error.message) }
+            }
+        }
+    }
+
     fun dismissGestureHelp(neverShowAgain: Boolean) {
         viewModelScope.launch {
             if (neverShowAgain) {
@@ -183,7 +198,9 @@ class DeckViewModel(
             }.onSuccess { (session, handwriting) ->
                 val adjustedScore = applyAssistPenalty(
                     score = handwriting.totalScore,
-                    assistCount = activeAssists.size
+                    assistCount = activeAssists.size,
+                    cardDifficulty = card.difficulty,
+                    abilityLevel = estimateSessionAbility(session)
                 )
                 _uiState.update {
                     it.copy(
@@ -648,6 +665,14 @@ private fun scoreBinaryHandwritingCandidate(
     )
 }
 
+private fun estimateSessionAbility(session: DeckSession): Float {
+    val answered = session.cards.filter { it.resultScore != null }
+    if (answered.isEmpty()) return session.cards.map { it.difficulty }.average().toFloat().takeIf { !it.isNaN() } ?: 3f
+    val avgDifficulty = answered.map { it.difficulty }.average().toFloat()
+    val avgScore = answered.mapNotNull { it.resultScore }.average().toFloat()
+    return (avgDifficulty + (avgScore - 68f) / 6f).coerceIn(1f, 12f)
+}
+
 private fun rerankUnrevealedCards(session: DeckSession, currentCardId: String?): DeckSession {
     if (session.cards.isEmpty()) return session
     val answered = session.cards.filter { it.resultScore != null }
@@ -657,6 +682,24 @@ private fun rerankUnrevealedCards(session: DeckSession, currentCardId: String?):
     } else {
         answered.map { it.difficulty }.average().toFloat()
     }
+
+    // Dynamic target: shift based on session performance to keep learner in
+    // the zone of proximal development
+    val baseTarget = when {
+        observedAverage >= 90f -> 75f  // stretch the learner with harder cards
+        observedAverage < 55f -> 88f   // ease off with simpler cards
+        else -> 82f
+    }
+
+    // Momentum: check last 3 answered cards for streaks
+    val recentScores = answered.takeLast(3).mapNotNull { it.resultScore }
+    val momentumBonus = when {
+        recentScores.size >= 3 && recentScores.all { it >= 80 } -> -5f  // all excellent → lower target (harder)
+        recentScores.size >= 3 && recentScores.all { it < 45 } -> 5f   // all incorrect → raise target (easier)
+        else -> 0f
+    }
+    val targetScore = (baseTarget + momentumBonus).coerceIn(70f, 92f)
+
     val currentIndex = currentCardId
         ?.let { cardId -> session.cards.indexOfFirst { it.cardId == cardId } }
         ?.takeIf { it >= 0 }
@@ -667,7 +710,7 @@ private fun rerankUnrevealedCards(session: DeckSession, currentCardId: String?):
     val alreadyScoredTail = session.cards.drop(lockUntil).filter { it.resultScore != null }
     val sortedTail = unrevealed.sortedByDescending { card ->
         val predicted = (observedAverage - ((card.difficulty - difficultyAnchor) * 7f)).coerceIn(0f, 100f)
-        val fit = 100f - abs(predicted - 82f)
+        val fit = 100f - abs(predicted - targetScore)
         val challengeBonus = if (observedAverage >= 90f && card.difficulty > difficultyAnchor) 8f else 0f
         fit + challengeBonus
     }

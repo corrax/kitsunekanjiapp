@@ -30,6 +30,16 @@ data class UserRankSummary(
     val hardWordScore: Int?
 )
 
+data class JlptLevelProgress(
+    val level: String,
+    val trackId: String,
+    val answeredCount: Int,
+    val totalCount: Int
+) {
+    val completionRatio: Float
+        get() = if (totalCount <= 0) 0f else (answeredCount.toFloat() / totalCount.toFloat()).coerceIn(0f, 1f)
+}
+
 data class PackProgress(
     val packId: String,
     val level: Int,

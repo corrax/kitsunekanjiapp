@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -375,107 +376,146 @@ fun DeckScreen(
                     val availableWidth = maxWidth
                     val boundedWidth = availableWidth.coerceIn(padMinSize, padMaxSize)
                     val padSize = if (availableWidth < padMinSize) availableWidth else boundedWidth
+
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState),
+                        modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color.White)
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                .weight(1f)
+                                .verticalScroll(scrollState),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Text(
-                                text = when (state.session?.deckType) {
-                                    DeckType.EXAM -> "Exam Pack"
-                                    DeckType.DAILY -> "Daily Deck"
-                                    DeckType.REMEDIAL -> "Remedial Deck"
-                                    null -> ""
-                                },
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.secondary
-                            )
-                            Text(
-                                text = promptLabelFor(currentCard.type),
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            val promptFurigana = currentCard.promptFurigana
-                            val shouldRenderFurigana = promptFurigana != null &&
-                                shouldShowFurigana(cardDifficulty = currentCard.difficulty)
-                            val plainJapanesePrompt = promptFurigana?.let(::stripFuriganaMarkup)
-                            if (shouldRenderFurigana) {
-                                FuriganaText(
-                                    text = promptFurigana,
-                                    modifier = Modifier.fillMaxWidth()
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = when (state.session?.deckType) {
+                                        DeckType.EXAM -> "Exam Pack"
+                                        DeckType.DAILY -> "Daily Deck"
+                                        DeckType.REMEDIAL -> "Remedial Deck"
+                                        null -> ""
+                                    },
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.secondary
                                 )
-                                if (shouldShowRomanizedPrompt(prompt = currentCard.prompt, japanesePrompt = plainJapanesePrompt)) {
+                                Text(
+                                    text = promptLabelFor(currentCard.type),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                val promptFurigana = currentCard.promptFurigana
+                                val shouldRenderFurigana = promptFurigana != null &&
+                                    shouldShowFurigana(cardDifficulty = currentCard.difficulty)
+                                val plainJapanesePrompt = promptFurigana?.let(::stripFuriganaMarkup)
+                                if (shouldRenderFurigana) {
+                                    FuriganaText(
+                                        text = promptFurigana,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    if (shouldShowRomanizedPrompt(prompt = currentCard.prompt, japanesePrompt = plainJapanesePrompt)) {
+                                        Text(
+                                            text = currentCard.prompt,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Color(0xFF6A5A48)
+                                        )
+                                    }
+                                } else {
                                     Text(
-                                        text = currentCard.prompt,
+                                        text = plainJapanesePrompt ?: currentCard.prompt,
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Text(
+                                    text = instructionFor(currentCard.type),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF6A5A48)
+                                )
+                                if (assistHintPayload != null) {
+                                    Text(
+                                        text = assistHintPayload.text,
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = Color(0xFF7A4F34),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                if (assistHintPayload?.reveal != null) {
+                                    LuckyKanjiRevealHint(
+                                        reveal = assistHintPayload.reveal,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                if (!assistHintPayload?.patternHint.isNullOrBlank()) {
+                                    Text(
+                                        text = assistHintPayload?.patternHint.orEmpty(),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = Color(0xFF6A5A48)
                                     )
                                 }
-                            } else {
+                                if (assistHintPayload?.wordBank?.isNotEmpty() == true) {
+                                    SentenceWordBankHint(
+                                        chunks = assistHintPayload.wordBank,
+                                        selectedIndices = wordBankSelection.toSet(),
+                                        showFurigana = assistHintPayload.showFurigana,
+                                        showRomaji = assistHintPayload.showRomaji,
+                                        onChunkToggled = { index ->
+                                            val updated = toggleWordBankSelection(wordBankSelection, index)
+                                            wordBankSelection = updated
+                                            applyWordBankSelection(
+                                                selection = updated,
+                                                chunks = assistHintPayload.wordBank,
+                                                onAnswerUpdated = { typedAnswer = it }
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
+                                if (currentCard.isRetryQueued) {
+                                    Text(
+                                        text = "Practice card",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = Color(0xFF8A4E2C),
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            state.latestMatchedAnswer?.let { matched ->
                                 Text(
-                                    text = plainJapanesePrompt ?: currentCard.prompt,
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            Text(
-                                text = instructionFor(currentCard.type),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF6A5A48)
-                            )
-                            if (assistHintPayload != null) {
-                                Text(
-                                    text = assistHintPayload.text,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = Color(0xFF7A4F34),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                            if (assistHintPayload?.reveal != null) {
-                                LuckyKanjiRevealHint(
-                                    reveal = assistHintPayload.reveal,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                            if (!assistHintPayload?.patternHint.isNullOrBlank()) {
-                                Text(
-                                    text = assistHintPayload?.patternHint.orEmpty(),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6A5A48)
-                                )
-                            }
-                            if (assistHintPayload?.wordBank?.isNotEmpty() == true) {
-                                SentenceWordBankHint(
-                                    chunks = assistHintPayload.wordBank,
-                                    selectedIndices = wordBankSelection.toSet(),
-                                    showFurigana = assistHintPayload.showFurigana,
-                                    showRomaji = assistHintPayload.showRomaji,
-                                    onChunkToggled = { index ->
-                                        val updated = toggleWordBankSelection(wordBankSelection, index)
-                                        wordBankSelection = updated
-                                        applyWordBankSelection(
-                                            selection = updated,
-                                            chunks = assistHintPayload.wordBank,
-                                            onAnswerUpdated = { typedAnswer = it }
-                                        )
+                                    text = if (state.latestIsCanonical) {
+                                        "Matched: $matched"
+                                    } else {
+                                        "Matched accepted answer: $matched"
                                     },
-                                    modifier = Modifier.fillMaxWidth()
+                                    style = MaterialTheme.typography.bodyMedium
                                 )
                             }
-                            if (currentCard.isRetryQueued) {
+                            if (!state.latestIsCanonical) {
+                                state.latestCanonicalAnswer?.let { canonical ->
+                                    Text(
+                                        text = "JLPT canonical answer: $canonical",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color(0xFF6E4331)
+                                    )
+                                }
+                            }
+                            state.latestFeedback?.let { feedback ->
                                 Text(
-                                    text = "Practice card",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color(0xFF8A4E2C),
-                                    fontWeight = FontWeight.SemiBold
+                                    text = feedback,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            state.errorMessage?.let { error ->
+                                Text(
+                                    text = error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
@@ -509,39 +549,6 @@ fun DeckScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("Type your answer") }
-                            )
-                        }
-
-                        state.latestMatchedAnswer?.let { matched ->
-                            Text(
-                                text = if (state.latestIsCanonical) {
-                                    "Matched: $matched"
-                                } else {
-                                    "Matched accepted answer: $matched"
-                                },
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        if (!state.latestIsCanonical) {
-                            state.latestCanonicalAnswer?.let { canonical ->
-                                Text(
-                                    text = "JLPT canonical answer: $canonical",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6E4331)
-                                )
-                            }
-                        }
-                        state.latestFeedback?.let { feedback ->
-                            Text(
-                                text = feedback,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        state.errorMessage?.let { error ->
-                            Text(
-                                text = error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -918,36 +925,81 @@ private fun CardStackFrame(
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
-                    .padding(start = 6.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF000000).copy(alpha = leftHintAlpha))
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .zIndex(4f)
+                    .fillMaxHeight()
+                    .width(120.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = leftHintAlpha * 0.7f),
+                                Color.Transparent
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.CenterStart
             ) {
-                Text("Next Card", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Swipe left to skip",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .padding(start = 16.dp)
+                        .graphicsLayer { alpha = leftHintAlpha }
+                )
             }
         }
         if (rightHintAlpha > 0f) {
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF000000).copy(alpha = rightHintAlpha))
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .zIndex(4f)
+                    .fillMaxHeight()
+                    .width(120.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.Black.copy(alpha = rightHintAlpha * 0.7f)
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                Text("Previous Card", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Swipe right to go back",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .padding(end = 16.dp)
+                        .graphicsLayer { alpha = rightHintAlpha }
+                )
             }
         }
         if (topHintAlpha > 0f) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 6.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF000000).copy(alpha = topHintAlpha))
-                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .zIndex(4f)
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = topHintAlpha * 0.7f),
+                                Color.Transparent
+                            )
+                        )
+                    ),
+                contentAlignment = Alignment.TopCenter
             ) {
-                Text("Submit Card", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Swipe up to submit",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .padding(top = 24.dp)
+                        .graphicsLayer { alpha = topHintAlpha }
+                )
             }
         }
     }
@@ -1316,9 +1368,12 @@ private fun assistHintFor(card: com.kitsune.kanji.japanese.flashcards.domain.mod
 
         CardType.GRAMMAR_CLOZE_WRITE -> {
             val answer = card.canonicalAnswer
+            val grammarHint = inferGrammarHint(card.meaning, card.prompt, answer)
+            val firstCharHint = answer.firstOrNull()?.let { "Starts with: ${it}\u2026" }
             AssistHintPayload(
-                text = "Assist active: focus on the missing grammar chunk.",
-                patternHint = "Expected length: ${answer.length} characters."
+                text = "Assist active: grammar pattern hint below.",
+                patternHint = listOfNotNull(grammarHint, firstCharHint, "Length: ${answer.length}")
+                    .joinToString(" \u00B7 ")
             )
         }
 
@@ -1354,6 +1409,47 @@ private fun sentenceBuildAssistHint(card: com.kitsune.kanji.japanese.flashcards.
             text = "Assist active: focus on particle order and verb ending.",
             patternHint = particleFlow
         )
+    }
+}
+
+private fun inferGrammarHint(meaning: String?, prompt: String, answer: String): String {
+    val m = meaning?.lowercase().orEmpty()
+    val p = prompt.lowercase()
+    return when {
+        m.contains("te-form") || m.contains("て-form") ->
+            "Think: te-form conjugation"
+        m.contains("please") || answer.endsWith("ください") ->
+            "Think: polite request form"
+        m.contains("prohibition") || m.contains("must not") || answer.endsWith("いけません") || answer.endsWith("だめです") ->
+            "Think: prohibition (must not)"
+        m.contains("must do") || m.contains("なければ") || answer.contains("なければ") ->
+            "Think: obligation (must do)"
+        m.contains("want to") || answer.endsWith("たい") || answer.endsWith("たいです") ->
+            "Think: desire form (\u301Ctai)"
+        m.contains("intend") || answer.contains("つもり") ->
+            "Think: intention (tsumori)"
+        m.contains("even if") || answer.contains("としても") || answer.contains("ても") ->
+            "Think: concessive (even if)"
+        m.contains("when") || m.contains("if") || answer.contains("とき") || answer.contains("たら") ->
+            "Think: conditional/temporal"
+        m.contains("cause") || m.contains("because") || m.contains("node") || answer.contains("ので") || answer.contains("から") ->
+            "Think: cause-and-effect"
+        m.contains("come to be") || answer.contains("ように") ->
+            "Think: change of state (you ni)"
+        m.contains("polite") || answer.endsWith("ます") || answer.endsWith("ません") ->
+            "Think: polite verb ending"
+        m.contains("please don") || answer.contains("ないで") ->
+            "Think: negative request"
+        m.contains("can") || m.contains("able") || answer.contains("られ") || answer.contains("できる") ->
+            "Think: potential/ability form"
+        m.contains("passive") || m.contains("受身") ->
+            "Think: passive form"
+        m.contains("comparison") || answer.contains("より") || answer.contains("ほう") ->
+            "Think: comparison"
+        p.contains("（") && p.contains("）") ->
+            "Focus on the grammar that completes the sentence."
+        else ->
+            "Focus on the grammar form that fits."
     }
 }
 

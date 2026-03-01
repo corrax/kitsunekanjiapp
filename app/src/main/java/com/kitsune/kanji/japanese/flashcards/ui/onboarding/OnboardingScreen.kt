@@ -30,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
@@ -38,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,14 +59,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.EducationalGoal
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
+import com.kitsune.kanji.japanese.flashcards.ui.common.deckThemeDrawnVisuals
+import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import kotlinx.coroutines.launch
 
 data class OnboardingSelection(
     val learnerLevel: LearnerLevel,
-    val educationalGoal: EducationalGoal
+    val educationalGoal: EducationalGoal,
+    val topicTrackIds: Set<String>
 )
 
 @Composable
@@ -74,6 +79,15 @@ fun OnboardingScreen(
 ) {
     var selectedLevel by rememberSaveable { mutableStateOf(LearnerLevel.BEGINNER_N5.name) }
     var selectedGoal by rememberSaveable { mutableStateOf(EducationalGoal.CASUAL.name) }
+    var selectedTopicTrackIds by rememberSaveable {
+        mutableStateOf(
+            defaultTopicTrackIds(
+                goal = EducationalGoal.CASUAL,
+                level = LearnerLevel.BEGINNER_N5
+            )
+        )
+    }
+    var topicSelectionCustomized by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val notificationPermissionSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
@@ -90,9 +104,17 @@ fun OnboardingScreen(
         .getOrDefault(LearnerLevel.BEGINNER_N5)
     val educationalGoal = runCatching { EducationalGoal.valueOf(selectedGoal) }
         .getOrDefault(EducationalGoal.JLPT_OR_CLASSES)
+
+    LaunchedEffect(educationalGoal, learnerLevel) {
+        if (!topicSelectionCustomized) {
+            selectedTopicTrackIds = defaultTopicTrackIds(educationalGoal, learnerLevel)
+        }
+    }
+
     val onboardingSelection = OnboardingSelection(
         learnerLevel = learnerLevel,
-        educationalGoal = educationalGoal
+        educationalGoal = educationalGoal,
+        topicTrackIds = selectedTopicTrackIds.toSet()
     )
 
     val slides = remember(educationalGoal) { slidesForGoal(educationalGoal) }
@@ -112,7 +134,11 @@ fun OnboardingScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val theme = onboardingThemeForPage(page)
+                val theme = onboardingThemeForPage(
+                    page = page,
+                    educationalGoal = educationalGoal,
+                    selectedTopicTrackIds = selectedTopicTrackIds.toSet()
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -130,7 +156,7 @@ fun OnboardingScreen(
                             .fillMaxSize()
                             .background(
                                 Brush.verticalGradient(
-                                    listOf(Color(0x88FFFFFF), Color(0xD9FFFFFF))
+                                    listOf(theme.overlayTop, theme.overlayBottom)
                                 )
                             )
                     )
@@ -146,8 +172,23 @@ fun OnboardingScreen(
                         page == firstPage -> GoalSetupSlide(
                             learnerLevel = learnerLevel,
                             educationalGoal = educationalGoal,
+                            selectedTopicTrackIds = selectedTopicTrackIds.toSet(),
                             onLearnerLevelChange = { selectedLevel = it.name },
                             onGoalChange = { selectedGoal = it.name },
+                            onTopicToggle = { trackId ->
+                                topicSelectionCustomized = true
+                                selectedTopicTrackIds = selectedTopicTrackIds.toMutableList().apply {
+                                    if (contains(trackId)) {
+                                        if (size > 1) {
+                                            remove(trackId)
+                                        }
+                                    } else {
+                                        if (size < 4) {
+                                            add(trackId)
+                                        }
+                                    }
+                                }
+                            },
                             modifier = slideModifier
                         )
 
@@ -184,6 +225,11 @@ fun OnboardingScreen(
             }
 
             if (pagerState.currentPage < finalPage) {
+                val controlsTheme = onboardingThemeForPage(
+                    page = pagerState.currentPage,
+                    educationalGoal = educationalGoal,
+                    selectedTopicTrackIds = selectedTopicTrackIds.toSet()
+                )
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -191,8 +237,8 @@ fun OnboardingScreen(
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xEFFFFFFF))
-                        .border(1.dp, Color(0xFFFFD0B2), RoundedCornerShape(16.dp))
+                        .background(controlsTheme.panelColor)
+                        .border(1.dp, controlsTheme.panelBorder, RoundedCornerShape(16.dp))
                         .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -208,7 +254,7 @@ fun OnboardingScreen(
                                     .width(if (active) 22.dp else 8.dp)
                                     .height(8.dp)
                                     .background(
-                                        color = if (active) Color(0xFFFF5A00) else Color(0xFFFFD6BF),
+                                        color = if (active) controlsTheme.accent else controlsTheme.accentMuted,
                                         shape = RoundedCornerShape(50)
                                     )
                             )
@@ -234,49 +280,54 @@ fun OnboardingScreen(
 
 private data class OnboardingTheme(
     val imageRes: Int,
-    val baseColor: Color
+    val baseColor: Color,
+    val overlayTop: Color,
+    val overlayBottom: Color,
+    val panelColor: Color,
+    val panelBorder: Color,
+    val accent: Color,
+    val accentMuted: Color
 )
 
-private fun onboardingThemeForPage(page: Int): OnboardingTheme {
-    return when (page) {
-        0 -> OnboardingTheme(
-            imageRes = R.drawable.hero_spring,
-            baseColor = Color(0xFFFFF2E8)
-        )
-
-        1 -> OnboardingTheme(
-            imageRes = R.drawable.hero_summer,
-            baseColor = Color(0xFFE8F7FF)
-        )
-
-        2 -> OnboardingTheme(
-            imageRes = R.drawable.pack_scene_temple,
-            baseColor = Color(0xFFF2E8DD)
-        )
-
-        3 -> OnboardingTheme(
-            imageRes = R.drawable.pack_scene_city,
-            baseColor = Color(0xFFEAF1F5)
-        )
-
-        4 -> OnboardingTheme(
-            imageRes = R.drawable.hero_autumn,
-            baseColor = Color(0xFFFFEFE0)
-        )
-
-        else -> OnboardingTheme(
-            imageRes = R.drawable.pack_scene_food,
-            baseColor = Color(0xFFFFE8D2)
-        )
+private fun onboardingThemeForPage(
+    page: Int,
+    educationalGoal: EducationalGoal,
+    selectedTopicTrackIds: Set<String>
+): OnboardingTheme {
+    val selectedThemeIds = selectedTopicTrackIds
+        .mapNotNull { trackId ->
+            deckThemeCatalog.firstOrNull { it.contentTrackId == trackId }?.id
+        }
+    val goalThemeIds = when (educationalGoal) {
+        EducationalGoal.CASUAL -> listOf("daily_life", "food", "shopping")
+        EducationalGoal.EVERYDAY_USE -> listOf("daily_life", "conversation", "shopping")
+        EducationalGoal.SCHOOL_OR_WORK -> listOf("school", "work", "daily_life")
+        EducationalGoal.JLPT_OR_CLASSES -> listOf("jlpt_n5", "jlpt_n4", "jlpt_n3")
     }
+    val themeCycle = (selectedThemeIds + goalThemeIds + listOf("jlpt_n5"))
+        .distinct()
+        .ifEmpty { listOf("jlpt_n5") }
+    val visuals = deckThemeDrawnVisuals(themeCycle[page % themeCycle.size])
+    return OnboardingTheme(
+        imageRes = visuals.imageRes,
+        baseColor = visuals.baseColor,
+        overlayTop = visuals.overlayTop,
+        overlayBottom = visuals.overlayBottom,
+        panelColor = visuals.panelColor,
+        panelBorder = visuals.panelBorder,
+        accent = visuals.accent,
+        accentMuted = visuals.accentMuted
+    )
 }
 
 @Composable
 private fun GoalSetupSlide(
     learnerLevel: LearnerLevel,
     educationalGoal: EducationalGoal,
+    selectedTopicTrackIds: Set<String>,
     onLearnerLevelChange: (LearnerLevel) -> Unit,
     onGoalChange: (EducationalGoal) -> Unit,
+    onTopicToggle: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -313,6 +364,11 @@ private fun GoalSetupSlide(
                 LearnerLevelSelector(
                     selected = learnerLevel,
                     onSelected = onLearnerLevelChange
+                )
+
+                TopicPreferenceSelector(
+                    selectedTrackIds = selectedTopicTrackIds,
+                    onToggle = onTopicToggle
                 )
             }
         }
@@ -498,6 +554,7 @@ private fun summaryForSelection(goal: EducationalGoal, level: LearnerLevel): Str
         EducationalGoal.JLPT_OR_CLASSES -> "JLPT-focused progression"
     }
     val levelSummary = when (level) {
+        LearnerLevel.PRE_N5 -> "starting from the very basics"
         LearnerLevel.BEGINNER_N5 -> "starting around JLPT N5"
         LearnerLevel.BEGINNER_PLUS_N4 -> "starting around JLPT N4"
         LearnerLevel.INTERMEDIATE_N3 -> "starting around JLPT N3"
@@ -605,6 +662,7 @@ private fun LearnerLevelSelector(
     onSelected: (LearnerLevel) -> Unit
 ) {
     val options = listOf(
+        LearnerLevel.PRE_N5 to "Complete Beginner (Pre-N5)",
         LearnerLevel.BEGINNER_N5 to "Beginner (~JLPT N5)",
         LearnerLevel.BEGINNER_PLUS_N4 to "Beginner+ (~JLPT N4)",
         LearnerLevel.INTERMEDIATE_N3 to "Intermediate (~JLPT N3)",
@@ -623,6 +681,42 @@ private fun LearnerLevelSelector(
                 text = title,
                 selected = selected == level,
                 onClick = { onSelected(level) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopicPreferenceSelector(
+    selectedTrackIds: Set<String>,
+    onToggle: (String) -> Unit
+) {
+    val options = remember {
+        deckThemeCatalog
+            .mapNotNull { theme ->
+                val trackId = theme.contentTrackId ?: return@mapNotNull null
+                TopicPreferenceOption(trackId = trackId, label = theme.title)
+            }
+            .distinctBy { it.trackId }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Topic preferences",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = Color(0xFF2D1E14)
+        )
+        Text(
+            text = "Choose 1-4 topics to blend into your daily decks.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF604A3D)
+        )
+        options.forEach { option ->
+            val selected = option.trackId in selectedTrackIds
+            SelectableTopicRow(
+                text = option.label,
+                selected = selected,
+                onClick = { onToggle(option.trackId) }
             )
         }
     }
@@ -667,6 +761,45 @@ private fun SelectableOnboardingRow(
 }
 
 @Composable
+private fun SelectableTopicRow(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Color(0xFFFFF0E5) else Color(0xFFFFFFFF))
+            .border(
+                width = 1.dp,
+                color = if (selected) Color(0xFFFFAD79) else Color(0xFFFFD8C0),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(
+            checked = selected,
+            onCheckedChange = null,
+            colors = CheckboxDefaults.colors(
+                checkedColor = Color(0xFFFF5A00),
+                uncheckedColor = Color(0xFFFFD8C0),
+                checkmarkColor = Color.White
+            )
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = Color(0xFF3F2A20),
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.padding(end = 8.dp)
+        )
+    }
+}
+
+@Composable
 private fun ValueBullet(text: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -696,3 +829,44 @@ private data class OnboardingSlide(
     val title: String,
     val body: String
 )
+
+private data class TopicPreferenceOption(
+    val trackId: String,
+    val label: String
+)
+
+private fun defaultTopicTrackIds(
+    goal: EducationalGoal,
+    level: LearnerLevel
+): List<String> {
+    return when (goal) {
+        EducationalGoal.CASUAL -> when (level) {
+            LearnerLevel.PRE_N5 -> listOf("foundations", "conversation")
+            else -> listOf("conversation", "daily_life_core", "school")
+        }
+
+        EducationalGoal.EVERYDAY_USE -> when (level) {
+            LearnerLevel.PRE_N5 -> listOf("foundations", "daily_life_core", "conversation")
+            else -> listOf("daily_life_core", "conversation", "shopping_core")
+        }
+
+        EducationalGoal.SCHOOL_OR_WORK -> when (level) {
+            LearnerLevel.INTERMEDIATE_N3,
+            LearnerLevel.ADVANCED_N2 -> listOf("work", "school", "conversation")
+
+            LearnerLevel.PRE_N5,
+            LearnerLevel.BEGINNER_N5,
+            LearnerLevel.BEGINNER_PLUS_N4,
+            LearnerLevel.UNSURE -> listOf("school", "work", "conversation")
+        }
+
+        EducationalGoal.JLPT_OR_CLASSES -> when (level) {
+            LearnerLevel.PRE_N5 -> listOf("foundations", "jlpt_n5_core")
+            LearnerLevel.BEGINNER_N5,
+            LearnerLevel.UNSURE -> listOf("jlpt_n5_core", "jlpt_n4_core")
+            LearnerLevel.BEGINNER_PLUS_N4 -> listOf("jlpt_n4_core", "jlpt_n5_core")
+            LearnerLevel.INTERMEDIATE_N3,
+            LearnerLevel.ADVANCED_N2 -> listOf("jlpt_n3_core", "jlpt_n4_core")
+        }
+    }
+}

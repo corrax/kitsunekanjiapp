@@ -46,3 +46,25 @@ fun applyAssistPenalty(score: Int, assistCount: Int): Int {
         penalized.coerceIn(0, 100)
     }
 }
+
+/**
+ * Difficulty-aware assist penalty. When a card is much harder than the
+ * learner's ability, the penalty is lighter (needing help is expected).
+ * When the card is easy relative to ability, the penalty is steeper.
+ */
+fun applyAssistPenalty(score: Int, assistCount: Int, cardDifficulty: Int, abilityLevel: Float): Int {
+    val normalized = score.coerceIn(0, 100)
+    if (assistCount <= 0) return normalized
+    val gap = cardDifficulty - abilityLevel
+    val factor = when {
+        gap > 2f -> 0.90f   // hard card: only 10% penalty
+        gap < -2f -> 0.70f  // easy card: 30% penalty
+        else -> ASSIST_SCORE_REDUCTION_FACTOR // matched: 20% penalty
+    }
+    val penalized = (normalized * factor).toInt()
+    return if (normalized >= SCORE_OK_MIN && penalized < SCORE_OK_MIN) {
+        SCORE_OK_MIN
+    } else {
+        penalized.coerceIn(0, 100)
+    }
+}

@@ -46,7 +46,8 @@ class AppContainer(application: Application) {
         dao = database.kitsuneDao(),
         powerUpPreferences = powerUpPreferences,
         dailySchedulePreferences = dailySchedulePreferences,
-        onboardingPreferences = onboardingPreferences
+        onboardingPreferences = onboardingPreferences,
+        deckSelectionPreferences = deckSelectionPreferences
     )
 
     val handwritingScorer: HandwritingScorer = MlKitHandwritingScorer()

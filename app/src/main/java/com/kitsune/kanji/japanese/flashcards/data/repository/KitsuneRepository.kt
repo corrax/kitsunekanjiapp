@@ -2,6 +2,7 @@ package com.kitsune.kanji.japanese.flashcards.data.repository
 
 import androidx.room.withTransaction
 import com.kitsune.kanji.japanese.flashcards.data.local.DailySchedulePreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.EducationalGoal
 import com.kitsune.kanji.japanese.flashcards.data.local.KitsuneDatabase
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
@@ -31,6 +32,7 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
+import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.KanjiAttemptHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
@@ -55,6 +57,7 @@ import kotlin.random.Random
 interface KitsuneRepository {
     suspend fun initialize()
     suspend fun getHomeSnapshot(trackId: String): HomeSnapshot
+    suspend fun getJlptLevelProgress(): List<JlptLevelProgress>
     suspend fun dismissDailyReminder()
     suspend fun createOrLoadDailyDeck(trackId: String): DeckSession
     suspend fun createOrLoadExamDeck(packId: String): DeckSession
@@ -75,7 +78,8 @@ class KitsuneRepositoryImpl(
     private val dao: KitsuneDao,
     private val powerUpPreferences: PowerUpPreferences,
     private val dailySchedulePreferences: DailySchedulePreferences,
-    private val onboardingPreferences: OnboardingPreferences
+    private val onboardingPreferences: OnboardingPreferences,
+    private val deckSelectionPreferences: DeckSelectionPreferences
 ) : KitsuneRepository {
     override suspend fun initialize() {
         val seed = mergeSeedBundles(
@@ -194,6 +198,20 @@ class KitsuneRepositoryImpl(
         )
     }
 
+    override suspend fun getJlptLevelProgress(): List<JlptLevelProgress> {
+        return jlptTrackMapping.map { (level, trackId) ->
+            val totalCount = dao.getTrackCardCount(trackId)
+            val answeredCount = dao.getAttemptedCardCountForTrack(trackId)
+                .coerceAtMost(totalCount)
+            JlptLevelProgress(
+                level = level,
+                trackId = trackId,
+                answeredCount = answeredCount,
+                totalCount = totalCount
+            )
+        }
+    }
+
     override suspend fun dismissDailyReminder() {
         val today = cycleDate()
         powerUpPreferences.markDailyReminderDismissed(today)
@@ -217,7 +235,12 @@ class KitsuneRepositoryImpl(
             primaryTrackId = track.trackId,
             availableTrackIds = availableTrackIds
         )
-        val crossTrackCards = relatedTracks.crossTrackIds.flatMap { relatedTrackId ->
+        val preferredTopicCardsByTrack = relatedTracks.preferredTopicTrackIds.associateWith { topicTrackId ->
+            dao.getUnlockedCardsForTrack(topicTrackId)
+        }
+        val crossTrackCards = relatedTracks.crossTrackIds
+            .filterNot { it in relatedTracks.preferredTopicTrackIds }
+            .flatMap { relatedTrackId ->
             dao.getUnlockedCardsForTrack(relatedTrackId)
         }
         val dailySeedCards = relatedTracks.dailySeedTrackIds.flatMap { dailyTrackId ->
@@ -247,15 +270,18 @@ class KitsuneRepositoryImpl(
             dueCards = dueCards,
             newCards = newCards,
             crossTrackCards = crossTrackCards,
+            preferredTopicCardsByTrack = preferredTopicCardsByTrack,
             dailySeedCards = dailySeedCards,
             abilityState = abilityState,
             dueCount = dueCount
         )
 
+        val sequencedCards = applyCardTypeSequencing(chosenCards)
+
         return createDeckSession(
             deckType = DeckType.DAILY,
             sourceId = sourceId,
-            cards = chosenCards,
+            cards = sequencedCards,
             retryCardIds = retryCardIds.toSet()
         )
     }
@@ -359,7 +385,9 @@ class KitsuneRepositoryImpl(
             .filter { it.isNotBlank() }
         val adjustedScore = applyAssistPenalty(
             score = submission.score,
-            assistCount = appliedAssists.size
+            assistCount = appliedAssists.size,
+            cardDifficulty = submission.cardDifficulty,
+            abilityLevel = trackAbility?.abilityLevel ?: 1.5f
         )
         val quality = qualityFor(adjustedScore)
         val current = dao.getSrsState(submission.cardId)
@@ -836,6 +864,7 @@ class KitsuneRepositoryImpl(
         dueCards: List<CardEntity>,
         newCards: List<CardEntity>,
         crossTrackCards: List<CardEntity>,
+        preferredTopicCardsByTrack: Map<String, List<CardEntity>>,
         dailySeedCards: List<CardEntity>,
         abilityState: TrackAbilityEntity,
         dueCount: Int
@@ -848,20 +877,26 @@ class KitsuneRepositoryImpl(
             dueCount = dueCount
         )
         val selected = LinkedHashMap<String, CardEntity>()
-        val minNew = if (rollingScore < 72f) 2 else 3
-        val retryQuota = if (rollingScore < 72f) 6 else 5
+        // Smooth quota curves: lerp between extremes based on rolling score
+        val t = ((rollingScore - 50f) / 40f).coerceIn(0f, 1f) // 0 at score 50, 1 at score 90
+        val retryQuota = (7f - 3f * t).toInt().coerceIn(3, 7)  // 7→4
+        val minNew = (1f + 3f * t).toInt().coerceIn(1, 4)       // 1→4
         val dueQuota = when {
             dueCount >= 20 -> 8
             dueCount >= 12 -> 7
             else -> 6
         }
-        val crossTrackQuota = if (rollingScore >= 86f) 3 else 2
-        val dailySeedQuota = if (rollingScore >= 90f) 3 else 2
-        val challengeQuota = when {
-            rollingScore >= 93f -> 3
-            rollingScore >= 86f -> 2
-            else -> 1
+        val preferredTopicTrackCount = preferredTopicCardsByTrack.size
+        val guaranteedPreferredTopicQuota = preferredTopicTrackCount.coerceAtMost(3)
+        val preferredTopicQuota = if (preferredTopicTrackCount > 0) {
+            (1f + 1f * t).toInt().coerceIn(1, 2)
+        } else {
+            0
         }
+        val crossTrackQuota = (1f + 1f * t).toInt().coerceIn(1, 2)
+        val dailySeedQuota = (2f + 1f * t).toInt().coerceIn(2, 3)
+        val tChallenge = ((rollingScore - 70f) / 25f).coerceIn(0f, 1f) // 0 at 70, 1 at 95
+        val challengeQuota = (0f + 3f * tChallenge).toInt().coerceIn(0, 3)
         val abilityLevel = abilityState.abilityLevel
 
         val challengeCandidates = unlockedCards
@@ -872,12 +907,19 @@ class KitsuneRepositoryImpl(
 
         val practiceCandidates = unlockedCards
             .sortedBy { abs(it.difficulty - abilityLevel) }
+        val preferredTopicCandidatesByTrack = preferredTopicCardsByTrack.mapValues { (_, cards) ->
+            cards.sortedBy { abs(it.difficulty - abilityLevel) }
+        }
+        val preferredTopicCandidates = preferredTopicCandidatesByTrack.values
+            .flatten()
+            .distinctBy { it.cardId }
         val crossTrackCandidates = crossTrackCards
             .sortedBy { abs(it.difficulty - abilityLevel) }
         val dailyCandidates = dailySeedCards
             .sortedBy { abs(it.difficulty - abilityLevel) }
         val blendedPracticeCandidates = (
             practiceCandidates +
+                preferredTopicCandidates +
                 crossTrackCandidates +
                 dailyCandidates
             )
@@ -889,6 +931,23 @@ class KitsuneRepositoryImpl(
             selected = selected,
             cards = newCards.sortedBy { abs(it.difficulty - abilityLevel) }.shuffled(random),
             quota = minNew,
+            targetSize = targetSize
+        )
+        preferredTopicCandidatesByTrack.keys
+            .shuffled(random)
+            .take(guaranteedPreferredTopicQuota)
+            .forEach { trackId ->
+                appendCards(
+                    selected = selected,
+                    cards = preferredTopicCandidatesByTrack[trackId].orEmpty().shuffled(random),
+                    quota = 1,
+                    targetSize = targetSize
+                )
+            }
+        appendCards(
+            selected = selected,
+            cards = preferredTopicCandidates.shuffled(random),
+            quota = preferredTopicQuota,
             targetSize = targetSize
         )
         appendCards(
@@ -913,16 +972,83 @@ class KitsuneRepositoryImpl(
         return selected.values.toList()
     }
 
+    /**
+     * Reorder daily deck cards so that when multiple card types reference the
+     * same kanji/concept, they follow a pedagogical progression:
+     * recognition → reading → writing → grammar → sentence.
+     * Cards without related siblings keep their original relative order.
+     */
+    private fun applyCardTypeSequencing(cards: List<CardEntity>): List<CardEntity> {
+        val typeOrder = mapOf(
+            CardType.VOCAB_READING to 0,
+            CardType.KANJI_READING to 1,
+            CardType.KANJI_WRITE to 2,
+            CardType.GRAMMAR_CHOICE to 3,
+            CardType.GRAMMAR_CLOZE_WRITE to 4,
+            CardType.SENTENCE_COMPREHENSION to 5,
+            CardType.SENTENCE_BUILD to 6
+        )
+        // Card IDs follow the pattern "{trackId}_{type}_{level}_{index}" where
+        // type is v/r/g/c/s/b. Track IDs can contain underscores (e.g. jlpt_n5_core).
+        // Cards sharing the same track+level+index are related concepts.
+        // We strip the type code (3rd-from-last segment) to group them.
+        val typeCodePattern = Regex("""^(.+)_([vrgcsb])_(\d+)_(\d+)$""")
+        fun conceptKey(card: CardEntity): String {
+            val match = typeCodePattern.matchEntire(card.cardId)
+            return if (match != null) {
+                // e.g. "jlpt_n5_core_v_1_1" → "jlpt_n5_core_1_1"
+                "${match.groupValues[1]}_${match.groupValues[3]}_${match.groupValues[4]}"
+            } else {
+                card.cardId
+            }
+        }
+
+        val groups = cards.groupBy(::conceptKey)
+        // For groups with multiple cards, sort by type order; singles keep position
+        val result = mutableListOf<CardEntity>()
+        val visited = mutableSetOf<String>()
+        for (card in cards) {
+            if (card.cardId in visited) continue
+            val key = conceptKey(card)
+            val group = groups[key] ?: listOf(card)
+            if (group.size > 1) {
+                group.sortedBy { typeOrder[it.type] ?: 99 }.forEach {
+                    if (it.cardId !in visited) {
+                        result.add(it)
+                        visited.add(it.cardId)
+                    }
+                }
+            } else {
+                result.add(card)
+                visited.add(card.cardId)
+            }
+        }
+        return result
+    }
+
     private suspend fun resolveDailyRelatedTracks(
         primaryTrackId: String,
         availableTrackIds: Set<String>
     ): DailyTrackSelection {
         val goal = onboardingPreferences.getEducationalGoal()
         val learnerLevel = onboardingPreferences.getLearnerLevel()
+        val preferredTopicTracks = deckSelectionPreferences.getSelectedTopicTrackIds()
+            .filter { trackId ->
+                trackId in availableTrackIds &&
+                    trackId != primaryTrackId &&
+                    trackId != GoalAlignedSeedContent.dailyChallengeTrackId
+            }
         val goalTracks = when (goal) {
-            EducationalGoal.CASUAL -> listOf("conversation", "school", "work")
-            EducationalGoal.EVERYDAY_USE -> listOf("conversation", "school", "work", N5SeedContent.trackId)
+            EducationalGoal.CASUAL -> when (learnerLevel) {
+                LearnerLevel.PRE_N5 -> listOf("foundations", "conversation")
+                else -> listOf("conversation", "school", "work")
+            }
+            EducationalGoal.EVERYDAY_USE -> when (learnerLevel) {
+                LearnerLevel.PRE_N5 -> listOf("foundations", "conversation", "daily_life_core")
+                else -> listOf("conversation", "school", "work", N5SeedContent.trackId)
+            }
             EducationalGoal.SCHOOL_OR_WORK -> when (learnerLevel) {
+                LearnerLevel.PRE_N5 -> listOf("foundations", "school", "conversation")
                 LearnerLevel.INTERMEDIATE_N3,
                 LearnerLevel.ADVANCED_N2 -> listOf("work", "school", "conversation")
 
@@ -932,6 +1058,8 @@ class KitsuneRepositoryImpl(
             }
 
             EducationalGoal.JLPT_OR_CLASSES -> when (learnerLevel) {
+                LearnerLevel.PRE_N5 -> listOf("foundations", "jlpt_n5_core")
+
                 LearnerLevel.BEGINNER_N5,
                 LearnerLevel.UNSURE -> listOf("jlpt_n5_core", "jlpt_n4_core")
 
@@ -941,13 +1069,22 @@ class KitsuneRepositoryImpl(
             }
         }
 
-        val requested = (listOf(primaryTrackId) + goalTracks + GoalAlignedSeedContent.dailyChallengeTrackId)
+        val requestedCrossTrackIds = (preferredTopicTracks + goalTracks)
+            .distinct()
+            .filter { it != primaryTrackId }
+            .take(5)
+        val requested = (
+            listOf(primaryTrackId) +
+                requestedCrossTrackIds +
+                GoalAlignedSeedContent.dailyChallengeTrackId
+            )
             .distinct()
             .filter { it in availableTrackIds }
         val crossTrackIds = requested.filter { it != primaryTrackId && it != GoalAlignedSeedContent.dailyChallengeTrackId }
         val dailySeedTrackIds = requested.filter { it == GoalAlignedSeedContent.dailyChallengeTrackId }
         val reinforcementTrackIds = (listOf(primaryTrackId) + crossTrackIds + dailySeedTrackIds).distinct()
         return DailyTrackSelection(
+            preferredTopicTrackIds = preferredTopicTracks,
             crossTrackIds = crossTrackIds,
             dailySeedTrackIds = dailySeedTrackIds,
             reinforcementTrackIds = reinforcementTrackIds
@@ -1103,6 +1240,7 @@ class KitsuneRepositoryImpl(
             reconcileTrackPackProgress(track.trackId)
             if (dao.getTrackAbility(track.trackId) == null) {
                 val initialAbility = when (level) {
+                    LearnerLevel.PRE_N5 -> 0.5f
                     LearnerLevel.BEGINNER_N5 -> 1.5f
                     LearnerLevel.BEGINNER_PLUS_N4 -> 3.0f
                     LearnerLevel.INTERMEDIATE_N3 -> 6.0f
@@ -1165,8 +1303,8 @@ class KitsuneRepositoryImpl(
         return when {
             effectiveScore >= 80 -> ScoreQuality(strengthDelta = 2, intervalMultiplier = 1.3f, isFailure = false)
             effectiveScore >= 65 -> ScoreQuality(strengthDelta = 1, intervalMultiplier = 1f, isFailure = false)
-            effectiveScore >= 50 -> ScoreQuality(strengthDelta = 0, intervalMultiplier = 0.72f, isFailure = false)
-            effectiveScore >= 45 -> ScoreQuality(strengthDelta = -1, intervalMultiplier = 0.5f, isFailure = true)
+            effectiveScore >= 55 -> ScoreQuality(strengthDelta = 0, intervalMultiplier = 0.8f, isFailure = false)
+            effectiveScore >= 45 -> ScoreQuality(strengthDelta = -1, intervalMultiplier = 0.55f, isFailure = false)
             else -> ScoreQuality(strengthDelta = -2, intervalMultiplier = 0.32f, isFailure = true)
         }
     }
@@ -1241,6 +1379,7 @@ class KitsuneRepositoryImpl(
     )
 
     private data class DailyTrackSelection(
+        val preferredTopicTrackIds: List<String>,
         val crossTrackIds: List<String>,
         val dailySeedTrackIds: List<String>,
         val reinforcementTrackIds: List<String>
@@ -1251,5 +1390,12 @@ class KitsuneRepositoryImpl(
         private const val EASY_DIFFICULTY_MAX = 4
         private const val HARD_DIFFICULTY_MIN = 8
         private const val RETEST_WEAK_SCORE_THRESHOLD = SCORE_REINFORCEMENT_CUTOFF
+        private val jlptTrackMapping = listOf(
+            "N5" to "jlpt_n5_core",
+            "N4" to "jlpt_n4_core",
+            "N3" to "jlpt_n3_core",
+            "N2" to "jlpt_n2_core",
+            "N1" to "jlpt_n1_core"
+        )
     }
 }

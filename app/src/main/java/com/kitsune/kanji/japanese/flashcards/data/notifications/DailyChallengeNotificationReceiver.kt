@@ -15,6 +15,8 @@ import androidx.core.content.ContextCompat
 import com.kitsune.kanji.japanese.flashcards.KitsuneApp
 import com.kitsune.kanji.japanese.flashcards.MainActivity
 import com.kitsune.kanji.japanese.flashcards.R
+import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
+import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelProgress
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -39,8 +41,9 @@ class DailyChallengeNotificationReceiver : BroadcastReceiver() {
                         val selectedTrackId = app.appContainer.deckSelectionPreferences
                             .getSelectedTrackId(defaultTrackId = "jlpt_n5_core")
                         val snapshot = app.appContainer.repository.getHomeSnapshot(trackId = selectedTrackId)
+                        val jlptProgress = app.appContainer.repository.getJlptLevelProgress()
                         if (snapshot.shouldShowDailyReminder) {
-                            maybeNotify(context, intent.action ?: "")
+                            maybeNotify(context, intent.action ?: "", snapshot, jlptProgress)
                         }
                     } finally {
                         DailyChallengeNotificationScheduler.schedule(context)
@@ -51,7 +54,12 @@ class DailyChallengeNotificationReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun maybeNotify(context: Context, action: String) {
+    private fun maybeNotify(
+        context: Context,
+        action: String,
+        snapshot: HomeSnapshot,
+        jlptProgress: List<JlptLevelProgress>
+    ) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
@@ -71,14 +79,27 @@ class DailyChallengeNotificationReceiver : BroadcastReceiver() {
         val title: String
         val body: String
         val notificationId: Int
+
+        val currentTrackProgress = jlptProgress.find { it.trackId == snapshot.trackId }
+        val percent = currentTrackProgress?.completionRatio?.times(100)?.toInt() ?: 0
+        val levelLabel = currentTrackProgress?.level ?: "Kanji"
+
         if (action == DailyChallengeNotificationScheduler.actionResetCheck) {
-            title = "Daily Challenge just reset"
-            body = "Your new 15-card deck is ready. Keep your streak alive."
             notificationId = 3011
+            title = "Daily Challenge just reset"
+            body = if (currentTrackProgress != null && percent > 0) {
+                "You're $percent% through $levelLabel. Your new deck is ready!"
+            } else {
+                "Your new 15-card deck is ready. Keep your streak alive."
+            }
         } else {
-            title = "Evening study reminder"
-            body = "Quick run now helps lock today’s kanji before tomorrow."
             notificationId = 3012
+            title = "Evening study reminder"
+            body = if (snapshot.rankSummary.wordsCovered > 10) {
+                "You've mastered ${snapshot.rankSummary.wordsCovered} words. Lock in today's progress!"
+            } else {
+                "Quick run now helps lock today’s kanji before tomorrow."
+            }
         }
 
         val notification = NotificationCompat.Builder(context, channelId)
