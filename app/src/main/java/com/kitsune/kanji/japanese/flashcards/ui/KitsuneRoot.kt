@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -28,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.vectorResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -40,7 +41,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.kitsune.kanji.japanese.flashcards.AppContainer
 import com.kitsune.kanji.japanese.flashcards.KitsuneApp
-import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.EducationalGoal
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
 import com.kitsune.kanji.japanese.flashcards.data.notifications.DailyChallengeNotificationScheduler
@@ -50,6 +50,7 @@ import com.kitsune.kanji.japanese.flashcards.ui.deck.DeckViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.explore.ExploreScreen
 import com.kitsune.kanji.japanese.flashcards.ui.explore.ExploreViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.learn.LearnScreen
+import com.kitsune.kanji.japanese.flashcards.ui.learn.LearnViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingScreen
 import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingSelection
@@ -116,11 +117,10 @@ fun KitsuneRoot() {
         val tabRoutes = setOf(routeLearn, routeExplore, routeProfile, routeSettings)
         val showBottomBar = currentRoute in tabRoutes
 
-        val learnIcon = ImageVector.vectorResource(R.drawable.ic_launcher_foreground)
         val tabs = remember {
             listOf(
-                TabItem(routeLearn, "Learn", Icons.Filled.Search, Icons.Outlined.Search),
-                TabItem(routeExplore, "Explore", Icons.Filled.Search, Icons.Outlined.Search),
+                TabItem(routeLearn, "Learn", Icons.AutoMirrored.Filled.MenuBook, Icons.AutoMirrored.Outlined.MenuBook),
+                TabItem(routeExplore, "Explore", Icons.Filled.Explore, Icons.Outlined.Explore),
                 TabItem(routeProfile, "Profile", Icons.Filled.Person, Icons.Outlined.Person),
                 TabItem(routeSettings, "Settings", Icons.Filled.Settings, Icons.Outlined.Settings)
             )
@@ -226,41 +226,34 @@ fun KitsuneRoot() {
 
                 // --- Tab: Learn ---
                 composable(routeLearn) {
-                    val trackId = remember { mutableStateOf("jlpt_n5_core") }
-                    LaunchedEffect(Unit) {
-                        trackId.value = appContainer.deckSelectionPreferences
-                            .getSelectedTrackId("jlpt_n5_core")
-                    }
-                    val viewModel: DeckViewModel = viewModel(
-                        factory = DeckViewModel.factory(
+                    val viewModel: LearnViewModel = viewModel(
+                        factory = LearnViewModel.factory(
                             repository = appContainer.repository,
-                            handwritingScorer = appContainer.handwritingScorer,
-                            onboardingPreferences = appContainer.onboardingPreferences
+                            deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                            billingPreferences = appContainer.billingPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                    val activity = LocalContext.current as? Activity
+
+                    LaunchedEffect(Unit) {
+                        viewModel.openDeckEvents.collect { deckRunId ->
+                            navController.navigate("$routeDeck/$deckRunId")
+                        }
+                    }
+
                     LearnScreen(
                         state = state,
-                        trackId = trackId.value,
-                        onAutoInitialize = viewModel::autoInitialize,
-                        onPrevious = viewModel::goPrevious,
-                        onNext = viewModel::goNext,
-                        onSubmitCard = { sample, typedAnswer, selectedChoice, assists ->
-                            viewModel.submitCurrentCard(
-                                sample = sample,
-                                typedAnswer = typedAnswer,
-                                selectedChoice = selectedChoice,
-                                requestedAssists = assists
-                            )
+                        onStartDailyDeck = viewModel::startDailyDeck,
+                        onStartExamPack = { packId ->
+                            activity?.let { act ->
+                                appContainer.adManager.showInterstitialBeforeLevel(act) {
+                                    viewModel.startExamPack(packId)
+                                }
+                            } ?: viewModel.startExamPack(packId)
                         },
-                        onDeckSubmitted = { runId ->
-                            navController.navigate("$routeDeckReport/$runId?fromSubmit=true") {
-                                popUpTo(routeLearn) { inclusive = false }
-                                launchSingleTop = true
-                            }
-                        },
-                        onSubmitDeck = viewModel::submitDeck,
-                        onDismissGestureOverlay = viewModel::dismissGestureHelp
+                        onThemeSelected = viewModel::onThemeSelected,
+                        onRefresh = viewModel::refreshHome
                     )
                 }
 
@@ -283,7 +276,8 @@ fun KitsuneRoot() {
 
                     ExploreScreen(
                         state = state,
-                        onTopicPillPressed = viewModel::onTopicPillPressed,
+                        onTopicSelected = viewModel::onTopicSelected,
+                        onTopicSelectionToggled = viewModel::onTopicSelectionToggled,
                         onStartExamPack = { packId ->
                             activity?.let { act ->
                                 appContainer.adManager.showInterstitialBeforeLevel(act) {
@@ -378,7 +372,8 @@ fun KitsuneRoot() {
                             }
                         },
                         onSubmitDeck = viewModel::submitDeck,
-                        onDismissGestureOverlay = viewModel::dismissGestureHelp
+                        onDismissGestureOverlay = viewModel::dismissGestureHelp,
+                        onAssistEnabled = viewModel::onAssistEnabledForCurrentCard
                     )
                 }
 

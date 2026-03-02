@@ -67,40 +67,21 @@ class ExploreViewModel(
         }
     }
 
-    fun onTopicPillPressed(theme: DeckThemeOption) {
+    fun onTopicSelected(theme: DeckThemeOption) {
         val trackId = theme.contentTrackId ?: return
         viewModelScope.launch {
-            val nextTopicTrackIds = _uiState.value.selectedTopicTrackIds
-                .toMutableSet()
-                .ifEmpty { mutableSetOf(trackId) }
-            if (trackId in nextTopicTrackIds && nextTopicTrackIds.size > 1) {
-                nextTopicTrackIds.remove(trackId)
-            } else {
-                nextTopicTrackIds.add(trackId)
-            }
-
             _uiState.update {
                 it.copy(
                     selectedThemeId = theme.id,
-                    selectedTopicTrackIds = nextTopicTrackIds,
                     errorMessage = null
                 )
             }
 
             runCatching {
                 repository.initialize()
-                deckSelectionPreferences.setSelectedTopicTrackIds(nextTopicTrackIds)
+                // Update selected theme ID preference so the UI state persists,
+                // but do NOT modify the selected topic tracks.
                 deckSelectionPreferences.setSelectedThemeId(theme.id)
-
-                val focusedTrack = deckSelectionPreferences.getSelectedTrackId("jlpt_n5_core")
-                val shouldFocusTrack = trackId in nextTopicTrackIds || focusedTrack !in nextTopicTrackIds
-                if (shouldFocusTrack) {
-                    val nextTrack = if (trackId in nextTopicTrackIds) trackId else nextTopicTrackIds.first()
-                    val nextThemeId = deckThemeCatalog.firstOrNull { it.contentTrackId == nextTrack }?.id
-                        ?: theme.id
-                    deckSelectionPreferences.setSelectedTrackId(nextTrack)
-                    deckSelectionPreferences.setSelectedThemeId(nextThemeId)
-                }
 
                 val snapshot = repository.getHomeSnapshot(trackId)
                 snapshot.packs
@@ -112,6 +93,57 @@ class ExploreViewModel(
                         errorMessage = null
                     )
                 }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(errorMessage = error.message ?: "Failed to load topic.")
+                }
+            }
+        }
+    }
+
+    fun onTopicSelectionToggled(theme: DeckThemeOption) {
+        val trackId = theme.contentTrackId ?: return
+        viewModelScope.launch {
+            val nextTopicTrackIds = _uiState.value.selectedTopicTrackIds
+                .toMutableSet()
+                .ifEmpty { mutableSetOf(trackId) }
+
+            if (trackId in nextTopicTrackIds && nextTopicTrackIds.size > 1) {
+                nextTopicTrackIds.remove(trackId)
+            } else if (trackId !in nextTopicTrackIds) {
+                nextTopicTrackIds.add(trackId)
+            } else {
+                 // Cannot toggle off the last remaining topic
+                 return@launch
+            }
+
+            _uiState.update {
+                it.copy(
+                    selectedTopicTrackIds = nextTopicTrackIds,
+                    errorMessage = null
+                )
+            }
+
+            runCatching {
+                repository.initialize()
+                deckSelectionPreferences.setSelectedTopicTrackIds(nextTopicTrackIds)
+
+                // If we just selected a track that wasn't the focused one, we might want to ensure
+                // the main deck logic knows about it.
+                // However, for Explore screen purposes, we just update the set.
+                // We keep the currently viewed theme selected.
+
+                // If the user unselected the currently viewed theme, we don't necessarily need to change the view,
+                // as they might just want to remove it from the daily deck but still look at it.
+                // So we do nothing else here regarding theme selection.
+
+                // We might want to update the "selected track" for the home tab if the current one was removed?
+                val focusedTrack = deckSelectionPreferences.getSelectedTrackId("jlpt_n5_core")
+                if (focusedTrack !in nextTopicTrackIds) {
+                    val nextTrack = nextTopicTrackIds.first()
+                    deckSelectionPreferences.setSelectedTrackId(nextTrack)
+                }
+
             }.onFailure { error ->
                 _uiState.update {
                     it.copy(errorMessage = error.message ?: "Failed to save topic preference.")

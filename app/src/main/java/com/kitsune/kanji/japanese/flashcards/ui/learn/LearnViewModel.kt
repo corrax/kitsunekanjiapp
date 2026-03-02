@@ -1,16 +1,17 @@
-package com.kitsune.kanji.japanese.flashcards.ui.home
+package com.kitsune.kanji.japanese.flashcards.ui.learn
 
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
-import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
+import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.DeckThemeOption
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,13 +20,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-data class HomeUiState(
+data class LearnHubUiState(
     val isLoading: Boolean = true,
     val isStartingDeck: Boolean = false,
     val startingPackId: String? = null,
-    val trackTitle: String = "",
     val currentStreak: Int = 0,
-    val currentStreakScore: Int = 0,
     val bestStreak: Int = 0,
     val rankSummary: UserRankSummary = UserRankSummary(
         hiddenRating = 1000,
@@ -38,24 +37,20 @@ data class HomeUiState(
     ),
     val hasStartedDailyChallenge: Boolean = false,
     val dailyActiveRun: ActiveDeckRunProgress? = null,
-    val shouldShowDailyReminder: Boolean = false,
     val packs: List<PackProgress> = emptyList(),
-    val lifetimeScore: Int = 0,
-    val lifetimeCardsReviewed: Int = 0,
-    val recentRuns: List<DeckRunHistoryItem> = emptyList(),
-    val selectedPackId: String? = null,
-    val selectedDeckThemeId: String = deckThemeCatalog.firstOrNull()?.id ?: "jlpt_n5",
+    val availableThemes: List<DeckThemeOption> = deckThemeCatalog,
+    val selectedThemeId: String = deckThemeCatalog.firstOrNull()?.id ?: "jlpt_n5",
     val selectedTrackId: String = "jlpt_n5_core",
-    val isAdsRemoved: Boolean = false,
     val errorMessage: String? = null
 )
 
-class HomeViewModel(
+class LearnViewModel(
     private val repository: KitsuneRepository,
     private val deckSelectionPreferences: DeckSelectionPreferences,
-    private val billingPreferences: com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+    private val billingPreferences: BillingPreferences
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(HomeUiState())
+
+    private val _uiState = MutableStateFlow(LearnHubUiState())
     val uiState = _uiState.asStateFlow()
 
     private val _openDeckEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
@@ -65,15 +60,10 @@ class HomeViewModel(
         viewModelScope.launch {
             val defaultThemeId = deckThemeCatalog.firstOrNull()?.id ?: "jlpt_n5"
             val savedTheme = deckSelectionPreferences.getSelectedThemeId(defaultThemeId)
-            val savedTrackId = deckSelectionPreferences.getSelectedTrackId(defaultTrackId = "jlpt_n5_core")
-            _uiState.update { it.copy(selectedDeckThemeId = savedTheme, selectedTrackId = savedTrackId) }
-            
-            launch {
-                billingPreferences.adsRemovedFlow.collect { removed ->
-                    _uiState.update { it.copy(isAdsRemoved = removed) }
-                }
+            val savedTrackId = deckSelectionPreferences.getSelectedTrackId("jlpt_n5_core")
+            _uiState.update {
+                it.copy(selectedThemeId = savedTheme, selectedTrackId = savedTrackId)
             }
-            
             loadHome()
         }
     }
@@ -81,7 +71,7 @@ class HomeViewModel(
     fun startDailyDeck() {
         if (_uiState.value.isStartingDeck || _uiState.value.startingPackId != null) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isStartingDeck = true, errorMessage = null, startingPackId = null) }
+            _uiState.update { it.copy(isStartingDeck = true, errorMessage = null) }
             runCatching {
                 repository.createOrLoadDailyDeck(trackId = _uiState.value.selectedTrackId)
             }.onSuccess { deck ->
@@ -102,43 +92,21 @@ class HomeViewModel(
             }.onSuccess { deck ->
                 _openDeckEvents.emit(deck.deckRunId)
             }.onFailure { error ->
-                _uiState.update {
-                    it.copy(errorMessage = error.message ?: "Failed to start exam deck.")
-                }
+                _uiState.update { it.copy(errorMessage = error.message ?: "Failed to start exam deck.") }
             }
             _uiState.update { it.copy(startingPackId = null) }
         }
     }
 
-    fun selectPack(packId: String) {
-        _uiState.update { it.copy(selectedPackId = packId) }
-    }
-
-    fun dismissDailyReminder() {
+    fun onThemeSelected(theme: DeckThemeOption) {
+        val trackId = theme.contentTrackId ?: _uiState.value.selectedTrackId
         viewModelScope.launch {
-            repository.dismissDailyReminder()
-            _uiState.update { it.copy(shouldShowDailyReminder = false) }
-        }
-    }
-
-    fun selectDeckTheme(themeId: String) {
-        viewModelScope.launch {
-            deckSelectionPreferences.setSelectedThemeId(themeId)
-            _uiState.update { it.copy(selectedDeckThemeId = themeId) }
-        }
-    }
-
-    fun selectDeck(themeId: String, trackId: String?) {
-        viewModelScope.launch {
-            deckSelectionPreferences.setSelectedThemeId(themeId)
+            deckSelectionPreferences.setSelectedThemeId(theme.id)
             if (!trackId.isNullOrBlank()) {
                 deckSelectionPreferences.setSelectedTrackId(trackId)
             }
             _uiState.update {
-                it.copy(
-                    selectedDeckThemeId = themeId,
-                    selectedTrackId = trackId ?: it.selectedTrackId
-                )
+                it.copy(selectedThemeId = theme.id, selectedTrackId = trackId)
             }
             loadHome()
         }
@@ -152,26 +120,17 @@ class HomeViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             runCatching {
-                repository.initialize()
                 repository.getHomeSnapshot(trackId = _uiState.value.selectedTrackId)
             }.onSuccess { snapshot ->
-                val defaultPackId = mostRecentUnlockedPackId(snapshot.packs)
                 _uiState.update {
                     it.copy(
                         isLoading = false,
-                        trackTitle = snapshot.trackTitle,
                         currentStreak = snapshot.currentStreak,
-                        currentStreakScore = snapshot.currentStreakScore,
                         bestStreak = snapshot.bestStreak,
                         rankSummary = snapshot.rankSummary,
                         hasStartedDailyChallenge = snapshot.hasStartedDailyChallenge,
                         dailyActiveRun = snapshot.dailyActiveRun,
-                        shouldShowDailyReminder = snapshot.shouldShowDailyReminder,
-                        packs = snapshot.packs,
-                        lifetimeScore = snapshot.lifetimeScore,
-                        lifetimeCardsReviewed = snapshot.lifetimeCardsReviewed,
-                        recentRuns = snapshot.recentRuns,
-                        selectedPackId = it.selectedPackId ?: defaultPackId
+                        packs = snapshot.packs
                     )
                 }
             }.onFailure { error ->
@@ -186,21 +145,13 @@ class HomeViewModel(
     }
 
     companion object {
-        private fun mostRecentUnlockedPackId(packs: List<PackProgress>): String? {
-            val mostRecentUnlocked = packs
-                .filter { it.status != com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus.LOCKED }
-                .maxByOrNull { it.level }
-                ?.packId
-            return mostRecentUnlocked ?: packs.minByOrNull { it.level }?.packId
-        }
-
         fun factory(
             repository: KitsuneRepository,
             deckSelectionPreferences: DeckSelectionPreferences,
-            billingPreferences: com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+            billingPreferences: BillingPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                HomeViewModel(
+                LearnViewModel(
                     repository = repository,
                     deckSelectionPreferences = deckSelectionPreferences,
                     billingPreferences = billingPreferences

@@ -23,6 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,6 +54,10 @@ import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.DeckThemeOption
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import kotlinx.coroutines.delay
 
+private val AccentOrange = Color(0xFFFF5A00)
+private val WarmSurface = Color(0xFFFFF8F1)
+private val TextDark = Color(0xFF2D1E14)
+
 data class ExploreUiState(
     val isLoading: Boolean = true,
     val selectedThemeId: String? = null,
@@ -64,7 +70,8 @@ data class ExploreUiState(
 @Composable
 fun ExploreScreen(
     state: ExploreUiState,
-    onTopicPillPressed: (DeckThemeOption) -> Unit,
+    onTopicSelected: (DeckThemeOption) -> Unit,
+    onTopicSelectionToggled: (DeckThemeOption) -> Unit,
     onStartExamPack: (String) -> Unit
 ) {
     var toastMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -114,22 +121,33 @@ fun ExploreScreen(
         ) {
             item {
                 Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "Explore Topics",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
+                Column {
+                    Text(
+                        text = "Explore Topics",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .width(40.dp)
+                            .height(3.dp)
+                            .background(AccentOrange, RoundedCornerShape(2.dp))
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "Set your topic preferences for daily decks. Tap any topic to select or remove it.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = Color(0xFF7A6355)
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "${state.selectedTopicTrackIds.size} topic(s) selected for deck mix",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = AccentOrange,
+                    fontWeight = FontWeight.SemiBold
                 )
                 state.errorMessage?.let { message ->
                     Spacer(Modifier.height(6.dp))
@@ -155,12 +173,7 @@ fun ExploreScreen(
                             isIncluded = isIncluded,
                             isSelected = isSelected,
                             onClick = {
-                                if (trackId != null && trackId !in state.selectedTopicTrackIds) {
-                                    toastMessage = "${
-                                        theme.title
-                                    } questions will be included in your daily decks."
-                                }
-                                onTopicPillPressed(theme)
+                                onTopicSelected(theme)
                             }
                         )
                     }
@@ -176,42 +189,45 @@ fun ExploreScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = selectedTheme.title,
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextDark
                             )
                             Text(
                                 text = selectedTheme.difficulty + " \u2022 " + selectedTheme.category,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color(0xFF7A6355)
                             )
                         }
-                        Text(
-                            text = if (selectedTheme.contentTrackId in state.selectedTopicTrackIds) {
-                                "Selected"
-                            } else {
-                                "Not selected"
+                        val isIncluded = selectedTheme.contentTrackId in state.selectedTopicTrackIds
+                        Button(
+                            onClick = {
+                                val trackId = selectedTheme.contentTrackId
+                                if (trackId != null && trackId !in state.selectedTopicTrackIds) {
+                                    toastMessage = "${
+                                        selectedTheme.title
+                                    } questions will be included in your daily decks."
+                                }
+                                onTopicSelectionToggled(selectedTheme)
                             },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selectedTheme.contentTrackId in state.selectedTopicTrackIds) {
-                                MaterialTheme.colorScheme.tertiary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier
-                                .background(
-                                    if (selectedTheme.contentTrackId in state.selectedTopicTrackIds) {
-                                        MaterialTheme.colorScheme.tertiaryContainer
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                    },
-                                    RoundedCornerShape(16.dp)
-                                )
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isIncluded) Color(0xFFE8D5C8) else AccentOrange,
+                                contentColor = if (isIncluded) Color(0xFF7A6355) else Color.White
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            contentPadding = ButtonDefaults.ContentPadding,
+                            modifier = Modifier.height(36.dp),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                        ) {
+                            Text(
+                                text = if (isIncluded) "Unselect" else "Select",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
 
@@ -219,12 +235,13 @@ fun ExploreScreen(
                     Text(
                         text = "Topic Curriculum",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextDark
                     )
                     Text(
                         text = "Kitsune adapts this sequence automatically as you progress.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Color(0xFF7A6355)
                     )
                 }
 
@@ -259,21 +276,21 @@ private fun TopicChip(
     onClick: () -> Unit
 ) {
     val bg = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        isIncluded -> MaterialTheme.colorScheme.tertiaryContainer
+        isSelected -> Color(0xFFFFE0CC)
+        isIncluded -> Color(0xFFFFEDE5)
         else -> Color.White
     }
-    val border = if (isSelected || isIncluded) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-    } else {
-        Color(0xFFE0E0E0)
+    val borderColor = when {
+        isSelected -> AccentOrange
+        isIncluded -> Color(0xFFFFBE9B)
+        else -> Color(0xFFE0E0E0)
     }
 
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
             .background(bg)
-            .border(width = 1.dp, color = border, shape = RoundedCornerShape(20.dp))
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(20.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -283,14 +300,15 @@ private fun TopicChip(
                 Icons.Default.Check,
                 contentDescription = "Selected",
                 modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.tertiary
+                tint = AccentOrange
             )
             Spacer(Modifier.width(4.dp))
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            fontWeight = if (isSelected || isIncluded) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (isSelected || isIncluded) TextDark else Color(0xFF5A4A3E)
         )
     }
 }
@@ -302,8 +320,8 @@ private fun TopicCurriculumStep(
     onStart: () -> Unit
 ) {
     val accent = when (pack.status) {
-        PackProgressStatus.PASSED -> Color(0xFF3BA56A)
-        PackProgressStatus.UNLOCKED -> MaterialTheme.colorScheme.primary
+        PackProgressStatus.PASSED -> Color(0xFF2E8B57)
+        PackProgressStatus.UNLOCKED -> AccentOrange
         PackProgressStatus.LOCKED -> Color(0xFFC4C7CF)
     }
     val progress = when (pack.status) {
@@ -365,38 +383,53 @@ private fun TopicCurriculumStep(
                     }
                 ),
             shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = WarmSurface),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Step ${pack.level}: ${pack.title}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = statusText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth()
+            Row {
+                // Left accent border
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(72.dp)
+                        .background(accent, RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
                 )
-                if (pack.bestExamScore > 0) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Best score: ${pack.bestExamScore}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Step ${pack.level}: ${pack.title}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = TextDark
+                        )
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF7A6355)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(5.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = accent,
+                        trackColor = Color(0xFFE8D5C8)
                     )
+                    if (pack.bestExamScore > 0) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Best score: ${pack.bestExamScore}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF7A6355)
+                        )
+                    }
                 }
             }
         }
@@ -411,8 +444,8 @@ private fun PreferenceToast(
     Card(
         modifier = modifier.width(272.dp),
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF203548)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2D1E14)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Row(
             modifier = Modifier
@@ -423,7 +456,7 @@ private fun PreferenceToast(
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = null,
-                tint = Color(0xFF9BE7C4),
+                tint = Color(0xFFFFBE9B),
                 modifier = Modifier.size(16.dp)
             )
             Spacer(Modifier.width(8.dp))

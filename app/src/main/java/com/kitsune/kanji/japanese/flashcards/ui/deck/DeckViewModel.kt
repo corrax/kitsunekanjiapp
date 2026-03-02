@@ -27,6 +27,7 @@ data class DeckUiState(
     val deckRunId: String = "",
     val session: DeckSession? = null,
     val currentIndex: Int = 0,
+    val assistEnabledCardIds: Set<String> = emptySet(),
     val latestFeedback: String? = null,
     val latestScore: Int? = null,
     val latestMatchedAnswer: String? = null,
@@ -79,11 +80,13 @@ class DeckViewModel(
         if (this.deckRunId == deckRunId && _uiState.value.session != null) {
             return
         }
+        val isNewDeck = this.deckRunId != deckRunId
         this.deckRunId = deckRunId
         _uiState.update {
             it.copy(
                 deckRunId = deckRunId,
                 currentIndex = 0,
+                assistEnabledCardIds = if (isNewDeck) emptySet() else it.assistEnabledCardIds,
                 latestScore = null,
                 latestFeedback = null,
                 latestMatchedAnswer = null,
@@ -119,6 +122,13 @@ class DeckViewModel(
                 onboardingPreferences.setDeckHowToPlayDismissed(dismissed = true)
             }
             _uiState.update { it.copy(showGestureHelp = false) }
+        }
+    }
+
+    fun onAssistEnabledForCurrentCard() {
+        val cardId = _uiState.value.currentCard?.cardId ?: return
+        _uiState.update {
+            it.copy(assistEnabledCardIds = it.assistEnabledCardIds + cardId)
         }
     }
 

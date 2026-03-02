@@ -20,6 +20,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatu
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.SrsStateEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.StreakStateEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.TrackAbilityEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.TrackEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.UserPackProgressEntity
 import com.kitsune.kanji.japanese.flashcards.data.seed.GoalAlignedSeedContent
 import com.kitsune.kanji.japanese.flashcards.data.seed.N5SeedContent
@@ -129,8 +130,7 @@ class KitsuneRepositoryImpl(
 
     override suspend fun getHomeSnapshot(trackId: String): HomeSnapshot {
         val today = cycleDate()
-        val track = dao.getTracks().firstOrNull { it.trackId == trackId }
-            ?: dao.getTracks().first()
+        val track = resolveTrack(trackId)
         val packs = dao.getPacks(track.trackId)
         val progressMap = dao.getPackProgress(packs.map { it.packId }).associateBy { it.packId }
         val dailySource = dailySourceId(track.trackId, today)
@@ -225,12 +225,15 @@ class KitsuneRepositoryImpl(
             return loadDeck(existing.deckRunId) ?: error("Failed to load existing daily deck")
         }
 
-        val track = dao.getTracks().firstOrNull { it.trackId == trackId }
-            ?: dao.getTracks().first()
+        val allTracks = dao.getTracks()
+        if (allTracks.isEmpty()) {
+            error("No study tracks are available. Please relaunch the app to reinitialize content.")
+        }
+        val track = allTracks.firstOrNull { it.trackId == trackId } ?: allTracks.first()
         val abilityState = loadOrCreateTrackAbility(track.trackId)
         val unlockedCards = dao.getUnlockedCardsForTrack(track.trackId)
         if (unlockedCards.isEmpty()) error("No unlocked cards available.")
-        val availableTrackIds = dao.getTracks().map { it.trackId }.toSet()
+        val availableTrackIds = allTracks.map { it.trackId }.toSet()
         val relatedTracks = resolveDailyRelatedTracks(
             primaryTrackId = track.trackId,
             availableTrackIds = availableTrackIds
@@ -699,6 +702,14 @@ class KitsuneRepositoryImpl(
 
     private fun remedialSourceId(trackId: String, attemptId: String): String {
         return "retest:$trackId:$attemptId"
+    }
+
+    private suspend fun resolveTrack(preferredTrackId: String): TrackEntity {
+        val tracks = dao.getTracks()
+        if (tracks.isEmpty()) {
+            error("No study tracks are available. Please relaunch the app to reinitialize content.")
+        }
+        return tracks.firstOrNull { it.trackId == preferredTrackId } ?: tracks.first()
     }
 
     private suspend fun applyDailyStreak(today: LocalDate, challengeScore: Int) {

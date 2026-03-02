@@ -186,5 +186,15 @@ val deckThemeCatalog = listOf(
 )
 
 fun deckThemeById(id: String?): DeckThemeOption {
-    return deckThemeCatalog.firstOrNull { it.id == id } ?: deckThemeCatalog.first()
+    return deckThemeCatalog.firstOrNull { it.id == id }
+        ?: deckThemeCatalog.firstOrNull()
+        ?: DeckThemeOption(
+            id = "fallback",
+            title = "Default Theme",
+            difficulty = "Beginner",
+            category = "System",
+            heroRes = R.drawable.hero_spring,
+            contentTrackId = "jlpt_n5_core",
+            levels = emptyList()
+        )
 }

@@ -39,8 +39,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -126,16 +124,18 @@ fun DeckScreen(
     onSubmitCard: (InkSample, String?, String?, List<String>) -> Unit,
     onDeckSubmitted: (String) -> Unit,
     onSubmitDeck: () -> Unit,
-    onDismissGestureOverlay: (Boolean) -> Unit
+    onDismissGestureOverlay: (Boolean) -> Unit,
+    onAssistEnabled: () -> Unit = {}
 ) {
     val currentCard = state.currentCard
+    val assistEnabled = currentCard?.cardId != null && currentCard.cardId in state.assistEnabledCardIds
     var currentSample by remember(currentCard?.cardId) { mutableStateOf(InkSample(emptyList())) }
     var typedAnswer by remember(currentCard?.cardId) { mutableStateOf("") }
     var selectedChoice by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
     var wordBankSelection by remember(currentCard?.cardId) { mutableStateOf(listOf<Int>()) }
     var canvasResetCounter by remember(currentCard?.cardId) { mutableIntStateOf(0) }
-    var assistEnabled by remember(currentCard?.cardId) { mutableStateOf(false) }
     var showAssistConfirm by rememberSaveable(state.deckRunId, currentCard?.cardId) { mutableStateOf(false) }
+    var showLeaveConfirm by rememberSaveable(state.deckRunId) { mutableStateOf(false) }
     var cardDragX by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var cardDragY by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var scoreBurst by remember(state.deckRunId) { mutableStateOf<ScoreBurstData?>(null) }
@@ -223,7 +223,27 @@ fun DeckScreen(
         currentSample = InkSample(emptyList())
         typedAnswer = ""
         selectedChoice = null
-        assistEnabled = false
+    }
+
+    if (showLeaveConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLeaveConfirm = false },
+            title = { Text("Leave deck?") },
+            text = { Text("Your progress is saved. You can resume from where you left off.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLeaveConfirm = false
+                    onBack()
+                }) {
+                    Text("Leave")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLeaveConfirm = false }) {
+                    Text("Stay")
+                }
+            }
+        )
     }
 
     val (bgImage, bgTint) = remember(state.session?.deckType, state.session?.sourceId) {
@@ -289,20 +309,32 @@ fun DeckScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                DeckActionPill(
-                    text = "Back",
-                    icon = Icons.AutoMirrored.Filled.ArrowBack,
-                    onClick = onBack,
-                    modifier = Modifier.weight(1f)
-                )
+                // Back button
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xF2FFFFFF))
+                        .border(1.dp, Color(0xFFD9B695), CircleShape)
+                        .clickable { showLeaveConfirm = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Leave deck",
+                        tint = Color(0xFF6D5444),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
                 Column(
                     modifier = Modifier
-                        .weight(1.2f)
+                        .weight(1f)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xF2FFFFFF))
                         .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(16.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    horizontalAlignment = Alignment.Start
                 ) {
                     Text(
                         text = "Card $cardPosition/$remainingCount",
@@ -329,12 +361,14 @@ fun DeckScreen(
                     text = "Finish",
                     icon = Icons.Filled.DoneAll,
                     onClick = onSubmitDeck,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
                 )
             }
 
             CardStackFrame(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
                 dragX = cardDragX,
                 dragY = cardDragY,
                 onDrag = { delta ->
@@ -370,11 +404,12 @@ fun DeckScreen(
                         .fillMaxSize()
                         .padding(12.dp)
                 ) {
-                    val scrollState = rememberScrollState()
-                    val padMinSize = 240.dp
+                    val padMinSize = 180.dp
                     val padMaxSize = 360.dp
                     val availableWidth = maxWidth
-                    val boundedWidth = availableWidth.coerceIn(padMinSize, padMaxSize)
+                    val padMaxByHeight = (maxHeight * 0.58f).coerceAtLeast(padMinSize)
+                    val targetPadMax = minOf(padMaxSize, padMaxByHeight)
+                    val boundedWidth = availableWidth.coerceIn(padMinSize, targetPadMax)
                     val padSize = if (availableWidth < padMinSize) availableWidth else boundedWidth
 
                     Column(
@@ -382,9 +417,7 @@ fun DeckScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .verticalScroll(scrollState),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Column(
@@ -485,39 +518,6 @@ fun DeckScreen(
                                     )
                                 }
                             }
-
-                            state.latestMatchedAnswer?.let { matched ->
-                                Text(
-                                    text = if (state.latestIsCanonical) {
-                                        "Matched: $matched"
-                                    } else {
-                                        "Matched accepted answer: $matched"
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            if (!state.latestIsCanonical) {
-                                state.latestCanonicalAnswer?.let { canonical ->
-                                    Text(
-                                        text = "JLPT canonical answer: $canonical",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFF6E4331)
-                                    )
-                                }
-                            }
-                            state.latestFeedback?.let { feedback ->
-                                Text(
-                                    text = feedback,
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                            }
-                            state.errorMessage?.let { error ->
-                                Text(
-                                    text = error,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
                         }
 
                         if (usesHandwritingPad) {
@@ -549,6 +549,39 @@ fun DeckScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 label = { Text("Type your answer") }
+                            )
+                        }
+
+                        state.latestMatchedAnswer?.let { matched ->
+                            Text(
+                                text = if (state.latestIsCanonical) {
+                                    "Your answer matched: $matched"
+                                } else {
+                                    "Accepted answer matched: $matched"
+                                },
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        if (!state.latestIsCanonical) {
+                            state.latestCanonicalAnswer?.let { canonical ->
+                                Text(
+                                    text = "Expected answer: $canonical",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFF6E4331)
+                                )
+                            }
+                        }
+                        state.latestFeedback?.let { feedback ->
+                            Text(
+                                text = feedback,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                        state.errorMessage?.let { error ->
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error
                             )
                         }
                     }
@@ -613,7 +646,7 @@ fun DeckScreen(
                 confirmButton = {
                     Button(
                         onClick = {
-                            assistEnabled = true
+                            onAssistEnabled()
                             showAssistConfirm = false
                         }
                     ) {
