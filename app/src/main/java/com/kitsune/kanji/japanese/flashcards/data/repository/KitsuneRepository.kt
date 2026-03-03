@@ -42,6 +42,8 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.TemplatePoint
 import com.kitsune.kanji.japanese.flashcards.domain.model.TemplateStroke
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.RECOGNITION_MASTERY_THRESHOLD
+import com.kitsune.kanji.japanese.flashcards.domain.scoring.RECOGNITION_MIN_SAMPLES
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.SCORE_REINFORCEMENT_CUTOFF
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.applyAssistPenalty
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
@@ -279,7 +281,11 @@ class KitsuneRepositoryImpl(
             dueCount = dueCount
         )
 
-        val sequencedCards = applyCardTypeSequencing(chosenCards)
+        val unlockedWriteLevels = getUnlockedWriteDifficulties(track.trackId)
+        val gatedCards = chosenCards.filter { card ->
+            card.type != CardType.KANJI_WRITE || card.difficulty in unlockedWriteLevels
+        }
+        val sequencedCards = applyCardTypeSequencing(gatedCards)
 
         return createDeckSession(
             deckType = DeckType.DAILY,
@@ -302,10 +308,24 @@ class KitsuneRepositoryImpl(
             return loadDeck(existing.deckRunId) ?: error("Failed to load existing exam deck.")
         }
 
-        val cards = dao.getCardsForPack(pack.packId)
-        if (cards.isEmpty()) {
+        val rawCards = dao.getCardsForPack(pack.packId)
+        if (rawCards.isEmpty()) {
             error("Pack has no cards.")
         }
+
+        val unlockedWriteLevels = getUnlockedWriteDifficulties(pack.trackId)
+        val meaningByDiffPos = rawCards
+            .filter { it.type == CardType.KANJI_MEANING }
+            .associateBy { it.difficulty to it.cardId.substringAfterLast("_") }
+        val cards = rawCards.mapNotNull { card ->
+            if (card.type == CardType.KANJI_WRITE && card.difficulty !in unlockedWriteLevels) {
+                // Replace gated write card with its meaning equivalent
+                val posKey = card.cardId.substringAfterLast("_")
+                meaningByDiffPos[card.difficulty to posKey]
+            } else {
+                card
+            }
+        }.distinctBy { it.cardId }
 
         return createDeckSession(
             deckType = DeckType.EXAM,
@@ -859,6 +879,16 @@ class KitsuneRepositoryImpl(
         )
     }
 
+    private suspend fun getUnlockedWriteDifficulties(trackId: String): Set<Int> {
+        return dao.getRecognitionMasteryByDifficulty(trackId)
+            .filter { row ->
+                row.sampleCount >= RECOGNITION_MIN_SAMPLES &&
+                    (row.avgScore ?: 0.0) >= RECOGNITION_MASTERY_THRESHOLD
+            }
+            .map { it.difficulty }
+            .toSet()
+    }
+
     private fun didPassPack(totalScore: Int): Boolean {
         return when (scoreBandFor(totalScore)) {
             ScoreBand.EXCELLENT,
@@ -991,19 +1021,20 @@ class KitsuneRepositoryImpl(
      */
     private fun applyCardTypeSequencing(cards: List<CardEntity>): List<CardEntity> {
         val typeOrder = mapOf(
-            CardType.VOCAB_READING to 0,
-            CardType.KANJI_READING to 1,
-            CardType.KANJI_WRITE to 2,
-            CardType.GRAMMAR_CHOICE to 3,
-            CardType.GRAMMAR_CLOZE_WRITE to 4,
-            CardType.SENTENCE_COMPREHENSION to 5,
-            CardType.SENTENCE_BUILD to 6
+            CardType.KANJI_MEANING to 0,
+            CardType.VOCAB_READING to 1,
+            CardType.KANJI_READING to 2,
+            CardType.KANJI_WRITE to 3,
+            CardType.GRAMMAR_CHOICE to 4,
+            CardType.GRAMMAR_CLOZE_WRITE to 5,
+            CardType.SENTENCE_COMPREHENSION to 6,
+            CardType.SENTENCE_BUILD to 7
         )
         // Card IDs follow the pattern "{trackId}_{type}_{level}_{index}" where
-        // type is v/r/g/c/s/b. Track IDs can contain underscores (e.g. jlpt_n5_core).
+        // type is v/r/g/c/s/b/m/k. Track IDs can contain underscores (e.g. jlpt_n5_core).
         // Cards sharing the same track+level+index are related concepts.
         // We strip the type code (3rd-from-last segment) to group them.
-        val typeCodePattern = Regex("""^(.+)_([vrgcsb])_(\d+)_(\d+)$""")
+        val typeCodePattern = Regex("""^(.+)_([vrgcsbmk])_(\d+)_(\d+)$""")
         fun conceptKey(card: CardEntity): String {
             val match = typeCodePattern.matchEntire(card.cardId)
             return if (match != null) {

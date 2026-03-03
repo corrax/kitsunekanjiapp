@@ -91,8 +91,55 @@ object N5SeedContent {
             )
         }
 
+        val meaningCards = kanji.mapIndexed { index, symbol ->
+            val level = (index / packSize) + 1
+            val posInLevel = (index % packSize) + 1
+            val meaning = englishPromptFor(index)
+            val reading = readingFor(index)
+            val cardId = "${trackId}_m_${level}_$posInLevel"
+            CardEntity(
+                cardId = cardId,
+                type = CardType.KANJI_MEANING,
+                prompt = symbol,
+                canonicalAnswer = meaning,
+                acceptedAnswersRaw = meaning,
+                reading = reading,
+                meaning = meaning,
+                promptFurigana = reading,
+                choicesRaw = englishChoices(correct = meaning, pool = n5EnglishPrompts, key = cardId),
+                difficulty = level,
+                templateId = "tmpl_$cardId"
+            )
+        }
+
+        val readingCards = kanji.mapIndexed { index, symbol ->
+            val level = (index / packSize) + 1
+            val posInLevel = (index % packSize) + 1
+            val reading = readingFor(index)
+            val cardId = "${trackId}_r_${level}_$posInLevel"
+            val pool = n5KanjiReadings
+                .filterIndexed { i, _ -> i != index }
+                .distinct()
+                .shuffled(Random(index + 7))
+                .take(3) + reading
+            val choices = pool.distinct().shuffled(Random(index xor 0x4D95A1F))
+            CardEntity(
+                cardId = cardId,
+                type = CardType.KANJI_READING,
+                prompt = symbol,
+                canonicalAnswer = reading,
+                acceptedAnswersRaw = reading,
+                reading = reading,
+                meaning = "kanji reading",
+                promptFurigana = null,
+                choicesRaw = choices.joinToString("|"),
+                difficulty = level,
+                templateId = "tmpl_$cardId"
+            )
+        }
+
         val supplementalCards = buildSupplementalCards()
-        val cards = baseKanjiCards + supplementalCards.map { it.card }
+        val cards = baseKanjiCards + meaningCards + readingCards + supplementalCards.map { it.card }
 
         val basePackCards = baseKanjiCards.mapIndexed { index, card ->
             val packNumber = (index / packSize) + 1
@@ -102,15 +149,31 @@ object N5SeedContent {
                 position = (index % packSize) + 1
             )
         }
+        val meaningPackCards = meaningCards.mapIndexed { index, card ->
+            val packNumber = (index / packSize) + 1
+            PackCardCrossRef(
+                packId = "n5_pack_$packNumber",
+                cardId = card.cardId,
+                position = packSize + (index % packSize) + 1
+            )
+        }
+        val readingPackCards = readingCards.mapIndexed { index, card ->
+            val packNumber = (index / packSize) + 1
+            PackCardCrossRef(
+                packId = "n5_pack_$packNumber",
+                cardId = card.cardId,
+                position = packSize * 2 + (index % packSize) + 1
+            )
+        }
         val supplementalPackCards = supplementalCards.map { seed ->
             val positionOffset = seed.positionOffset.coerceAtLeast(1)
             PackCardCrossRef(
                 packId = "n5_pack_${seed.packLevel}",
                 cardId = seed.card.cardId,
-                position = packSize + positionOffset
+                position = packSize * 3 + positionOffset
             )
         }
-        val packCards = basePackCards + supplementalPackCards
+        val packCards = basePackCards + meaningPackCards + readingPackCards + supplementalPackCards
         val packCardCountByPack = packCards
             .groupingBy { it.packId }
             .eachCount()
@@ -2195,23 +2258,6 @@ object N5SeedContent {
                 )
             ),
             SupplementalCardSeed(
-                packLevel = 1,
-                positionOffset = 2,
-                card = CardEntity(
-                    cardId = "n5_extra_reading_01",
-                    type = CardType.KANJI_READING,
-                    prompt = "\u65e5",
-                    canonicalAnswer = "nichi",
-                    acceptedAnswersRaw = "nichi|jitsu",
-                    reading = "nichi",
-                    meaning = "kanji reading",
-                    promptFurigana = null,
-                    choicesRaw = "nichi|jitsu|getsu|mizu",
-                    difficulty = 1,
-                    templateId = "tmpl_n5_extra_reading_01"
-                )
-            ),
-            SupplementalCardSeed(
                 packLevel = 2,
                 positionOffset = 1,
                 card = CardEntity(
@@ -2229,23 +2275,6 @@ object N5SeedContent {
                 )
             ),
             SupplementalCardSeed(
-                packLevel = 2,
-                positionOffset = 2,
-                card = CardEntity(
-                    cardId = "n5_extra_reading_02",
-                    type = CardType.KANJI_READING,
-                    prompt = "\u6708",
-                    canonicalAnswer = "getsu",
-                    acceptedAnswersRaw = "getsu|gatsu",
-                    reading = "getsu",
-                    meaning = "kanji reading",
-                    promptFurigana = null,
-                    choicesRaw = "getsu|gatsu|nichi|sui",
-                    difficulty = 2,
-                    templateId = "tmpl_n5_extra_reading_02"
-                )
-            ),
-            SupplementalCardSeed(
                 packLevel = 3,
                 positionOffset = 1,
                 card = CardEntity(
@@ -2260,23 +2289,6 @@ object N5SeedContent {
                     choicesRaw = "He took medicine and slept.|He slept without taking medicine.|He did not sleep because he skipped medicine.|He took medicine but could not sleep.",
                     difficulty = 3,
                     templateId = "tmpl_n5_extra_sentence_01"
-                )
-            ),
-            SupplementalCardSeed(
-                packLevel = 3,
-                positionOffset = 2,
-                card = CardEntity(
-                    cardId = "n5_extra_reading_03",
-                    type = CardType.KANJI_READING,
-                    prompt = "\u5b66",
-                    canonicalAnswer = "gaku",
-                    acceptedAnswersRaw = "gaku|manabu",
-                    reading = "gaku",
-                    meaning = "kanji reading",
-                    promptFurigana = null,
-                    choicesRaw = "gaku|manabu|kou|sho",
-                    difficulty = 3,
-                    templateId = "tmpl_n5_extra_reading_03"
                 )
             ),
             SupplementalCardSeed(
@@ -2466,7 +2478,110 @@ object N5SeedContent {
                     templateId = "tmpl_n5_extra_build_03"
                 )
             )
+        ) + buildN4PreviewCards()
+    }
+
+    /**
+     * N4 kanji preview cards: KANJI_MEANING + KANJI_READING recognition cards
+     * for N4 kanji, distributed across N5 packs 7-12. This builds familiarity
+     * with next-level kanji before users encounter them in the N4 track.
+     */
+    private fun buildN4PreviewCards(): List<SupplementalCardSeed> {
+        data class N4KanjiPreview(
+            val symbol: String,
+            val meaning: String,
+            val reading: String,
+            val pack: Int
         )
+
+        val n4MeaningPool = listOf(
+            "manage", "experience", "change", "connect", "tie",
+            "result", "explain", "clear", "meaning", "most",
+            "recent", "reason", "certain", "important", "topic"
+        )
+        val n4ReadingPool = listOf(
+            "けい", "けん", "へん", "れん", "けつ",
+            "か", "せつ", "めい", "い", "さい",
+            "きん", "ゆう", "ひつ", "よう", "だい"
+        )
+
+        val previews = listOf(
+            // Pack 7 — 3 kanji
+            N4KanjiPreview("経", "manage", "けい", 7),
+            N4KanjiPreview("験", "experience", "けん", 7),
+            N4KanjiPreview("変", "change", "へん", 7),
+            // Pack 8 — 3 kanji
+            N4KanjiPreview("連", "connect", "れん", 8),
+            N4KanjiPreview("結", "tie", "けつ", 8),
+            N4KanjiPreview("果", "result", "か", 8),
+            // Pack 9 — 3 kanji
+            N4KanjiPreview("説", "explain", "せつ", 9),
+            N4KanjiPreview("明", "clear", "めい", 9),
+            N4KanjiPreview("意", "meaning", "い", 9),
+            // Pack 10 — 2 kanji
+            N4KanjiPreview("最", "most", "さい", 10),
+            N4KanjiPreview("近", "recent", "きん", 10),
+            // Pack 11 — 2 kanji
+            N4KanjiPreview("由", "reason", "ゆう", 11),
+            N4KanjiPreview("必", "certain", "ひつ", 11),
+            // Pack 12 — 2 kanji
+            N4KanjiPreview("要", "important", "よう", 12),
+            N4KanjiPreview("題", "topic", "だい", 12)
+        )
+
+        return previews.flatMapIndexed { index, preview ->
+            val meaningId = "n5_n4prev_m_${preview.pack}_${index + 1}"
+            val readingId = "n5_n4prev_r_${preview.pack}_${index + 1}"
+            val meaningDistractors = n4MeaningPool
+                .filter { it != preview.meaning }
+                .shuffled(Random(meaningId.hashCode()))
+                .take(3)
+            val meaningChoices = (meaningDistractors + preview.meaning)
+                .shuffled(Random(meaningId.hashCode() xor 0x5BD1E995.toInt()))
+            val readingDistractors = n4ReadingPool
+                .filter { it != preview.reading }
+                .shuffled(Random(readingId.hashCode()))
+                .take(3)
+            val readingChoices = (readingDistractors + preview.reading)
+                .shuffled(Random(readingId.hashCode() xor 0x4D95A1F))
+            val posBase = packSize * 3 + 10 + (index * 2)
+            listOf(
+                SupplementalCardSeed(
+                    packLevel = preview.pack,
+                    positionOffset = posBase,
+                    card = CardEntity(
+                        cardId = meaningId,
+                        type = CardType.KANJI_MEANING,
+                        prompt = preview.symbol,
+                        canonicalAnswer = preview.meaning,
+                        acceptedAnswersRaw = preview.meaning,
+                        reading = preview.reading,
+                        meaning = preview.meaning,
+                        promptFurigana = preview.reading,
+                        choicesRaw = meaningChoices.joinToString("|"),
+                        difficulty = preview.pack,
+                        templateId = "tmpl_$meaningId"
+                    )
+                ),
+                SupplementalCardSeed(
+                    packLevel = preview.pack,
+                    positionOffset = posBase + 1,
+                    card = CardEntity(
+                        cardId = readingId,
+                        type = CardType.KANJI_READING,
+                        prompt = preview.symbol,
+                        canonicalAnswer = preview.reading,
+                        acceptedAnswersRaw = preview.reading,
+                        reading = preview.reading,
+                        meaning = "kanji reading",
+                        promptFurigana = null,
+                        choicesRaw = readingChoices.joinToString("|"),
+                        difficulty = preview.pack,
+                        templateId = "tmpl_$readingId"
+                    )
+                )
+            )
+        }
     }
 
     private fun strokeCountFor(symbol: String): Int {
@@ -2521,6 +2636,12 @@ object N5SeedContent {
     private fun englishPromptFor(index: Int): String {
         return n5EnglishPrompts.getOrElse(index) {
             error("Missing English prompt for index=$index")
+        }
+    }
+
+    private fun readingFor(index: Int): String {
+        return n5KanjiReadings.getOrElse(index) {
+            error("Missing reading for index=$index")
         }
     }
 
@@ -2693,6 +2814,33 @@ object N5SeedContent {
         "buy", "wheat", "half", "numbered turn", "father", "wind", "minute part", "hear ask", "rice", "walk",
         "mother", "direction", "north", "every", "younger sister", "ten thousand", "bright", "chirp", "hair", "gate",
         "night", "field plain", "friend", "use", "weekday", "come", "village inside", "reason", "talk", "harmony"
+    )
+
+    private val n5KanjiReadings = listOf(
+        "いち", "みぎ", "あめ", "えん", "おう", "おと", "した", "ひ", "はな", "かい",
+        "がく", "き", "きゅう", "やすみ", "たま", "きん", "そら", "つき", "いぬ", "みる",
+        "ご", "くち", "こう", "ひだり", "さん", "やま", "こ", "し", "いと", "じ",
+        "みみ", "なな", "くるま", "て", "じゅう", "でる", "おんな", "ちいさい", "うえ", "もり",
+        "ひと", "みず", "ただしい", "せい", "あお", "ゆう", "いし", "あか", "せん", "かわ",
+        "さき", "はやい", "くさ", "あし", "むら", "おおきい", "おとこ", "たけ", "なか", "むし",
+        "まち", "てん", "た", "つち", "に", "にち", "いる", "ねん", "しろ", "はち",
+        "ひゃく", "ぶん", "き", "ほん", "な", "め", "たつ", "ちから", "はやし", "ろく",
+        "ひく", "はね", "くも", "えん", "とおい", "なに", "か", "なつ", "いえ", "うた",
+        "が", "かい", "かい", "うみ", "え", "そと", "かど", "がく", "かつ", "あいだ",
+        "まる", "いわ", "かお", "き", "き", "かえる", "ゆみ", "うし", "さかな", "きょう",
+        "つよい", "おしえる", "ちかい", "あに", "かたち", "けい", "もと", "はら", "と", "ふるい",
+        "ごご", "あと", "ご", "こう", "こう", "ひろい", "こう", "ひかり", "かんがえる", "いく",
+        "たかい", "き", "あう", "たに", "くに", "くろ", "いま", "さい", "ほそい", "つくる",
+        "さん", "とまる", "いち", "や", "あね", "おもう", "かみ", "てら", "じ", "とき",
+        "しつ", "しゃ", "よわい", "くび", "あき", "しゅう", "はる", "かく", "すくない", "ば",
+        "いろ", "しょく", "こころ", "あたらしい", "おや", "ず", "かず", "にし", "こえ", "ほし",
+        "はれ", "きる", "ゆき", "ふね", "せん", "まえ", "くみ", "はしる", "おおい", "ふとい",
+        "からだ", "だい", "ち", "いけ", "しる", "ちゃ", "ひる", "ながい", "とり", "あさ",
+        "なおす", "とおる", "おとうと", "みせ", "てん", "でん", "かたな", "ふゆ", "あたる", "ひがし",
+        "こたえ", "あたま", "おなじ", "みち", "よむ", "うち", "みなみ", "にく", "うま", "うる",
+        "かう", "むぎ", "はん", "ばん", "ちち", "かぜ", "ふん", "きく", "こめ", "あるく",
+        "はは", "ほう", "きた", "まい", "いもうと", "まん", "あかるい", "なく", "け", "もん",
+        "よる", "の", "とも", "よう", "よう", "くる", "さと", "り", "はなし", "わ"
     )
 
     private val rawKanji = listOf(

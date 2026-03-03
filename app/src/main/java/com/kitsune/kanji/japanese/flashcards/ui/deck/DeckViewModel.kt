@@ -287,6 +287,7 @@ class DeckViewModel(
     ): CandidateScore {
         return when (card.type) {
             CardType.KANJI_WRITE -> evaluateHandwriting(card = card, sample = sample)
+            CardType.KANJI_MEANING,
             CardType.KANJI_READING,
             CardType.GRAMMAR_CHOICE,
             CardType.SENTENCE_COMPREHENSION -> evaluateKnowledge(
@@ -487,6 +488,13 @@ class DeckViewModel(
                 }
             }
 
+            // Handle 'm' before b, p, m as 'n' (shimbun -> shinbun)
+            if (current == 'm' && next != null && next in "bpm") {
+                result.append('ん')
+                index += 1
+                continue
+            }
+
             val kanaEntry = ROMAJI_TO_HIRAGANA.firstOrNull { (latin, _) ->
                 normalized.startsWith(latin, startIndex = index)
             }
@@ -587,7 +595,14 @@ private val ROMAJI_TO_HIRAGANA = listOf(
     "da" to "だ", "de" to "で", "do" to "ど",
     "ba" to "ば", "bi" to "び", "bu" to "ぶ", "be" to "べ", "bo" to "ぼ",
     "pa" to "ぱ", "pi" to "ぴ", "pu" to "ぷ", "pe" to "ぺ", "po" to "ぽ",
-    "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お"
+    "a" to "あ", "i" to "い", "u" to "う", "e" to "え", "o" to "お",
+    "sya" to "しゃ", "syu" to "しゅ", "syo" to "しょ",
+    "tya" to "ちゃ", "tyu" to "ちゅ", "tyo" to "ちょ",
+    "jya" to "じゃ", "jyu" to "じゅ", "jyo" to "じょ",
+    "zya" to "じゃ", "zyu" to "じゅ", "zyo" to "じょ",
+    "si" to "し", "ti" to "ち", "tu" to "つ", "hu" to "ふ",
+    "zi" to "じ", "di" to "ぢ", "du" to "づ",
+    "la" to "ら", "li" to "り", "lu" to "る", "le" to "れ", "lo" to "ろ"
 )
 
 private val HIRAGANA_TO_ROMAJI = mapOf(

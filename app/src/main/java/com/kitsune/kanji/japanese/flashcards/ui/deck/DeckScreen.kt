@@ -104,6 +104,8 @@ import com.kitsune.kanji.japanese.flashcards.domain.ink.InkSample
 import com.kitsune.kanji.japanese.flashcards.domain.ink.InkStroke
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.ScoreBand
 import com.kitsune.kanji.japanese.flashcards.domain.scoring.scoreBandFor
+import com.kitsune.kanji.japanese.flashcards.ui.common.CardPalette
+import com.kitsune.kanji.japanese.flashcards.ui.common.cardPaletteFor
 import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
 import kotlin.math.abs
 import kotlin.math.cos
@@ -132,10 +134,10 @@ fun DeckScreen(
     var currentSample by remember(currentCard?.cardId) { mutableStateOf(InkSample(emptyList())) }
     var typedAnswer by remember(currentCard?.cardId) { mutableStateOf("") }
     var selectedChoice by remember(currentCard?.cardId) { mutableStateOf<String?>(null) }
+    var submittedChoiceByTap by remember(currentCard?.cardId) { mutableStateOf(false) }
     var wordBankSelection by remember(currentCard?.cardId) { mutableStateOf(listOf<Int>()) }
     var canvasResetCounter by remember(currentCard?.cardId) { mutableIntStateOf(0) }
     var showAssistConfirm by rememberSaveable(state.deckRunId, currentCard?.cardId) { mutableStateOf(false) }
-    var showLeaveConfirm by rememberSaveable(state.deckRunId) { mutableStateOf(false) }
     var cardDragX by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var cardDragY by remember(currentCard?.cardId) { mutableFloatStateOf(0f) }
     var scoreBurst by remember(state.deckRunId) { mutableStateOf<ScoreBurstData?>(null) }
@@ -156,6 +158,7 @@ fun DeckScreen(
     }
     val isChoiceCard = currentCard?.choices?.isNotEmpty() == true &&
         currentCard.type in setOf(
+            CardType.KANJI_MEANING,
             CardType.KANJI_READING,
             CardType.VOCAB_READING,
             CardType.GRAMMAR_CHOICE,
@@ -225,29 +228,11 @@ fun DeckScreen(
         selectedChoice = null
     }
 
-    if (showLeaveConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLeaveConfirm = false },
-            title = { Text("Leave deck?") },
-            text = { Text("Your progress is saved. You can resume from where you left off.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showLeaveConfirm = false
-                    onBack()
-                }) {
-                    Text("Leave")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLeaveConfirm = false }) {
-                    Text("Stay")
-                }
-            }
-        )
-    }
-
     val (bgImage, bgTint) = remember(state.session?.deckType, state.session?.sourceId) {
         themedDeckBackground(state.session?.deckType, state.session?.sourceId)
+    }
+    val palette = remember(state.session?.sourceId) {
+        cardPaletteFor(state.session?.sourceId)
     }
 
     Box(
@@ -314,15 +299,15 @@ fun DeckScreen(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(Color(0xF2FFFFFF))
-                        .border(1.dp, Color(0xFFD9B695), CircleShape)
-                        .clickable { showLeaveConfirm = true },
+                        .background(palette.pillBg)
+                        .border(1.dp, palette.pillBorder, CircleShape)
+                        .clickable(onClick = onBack),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Leave deck",
-                        tint = Color(0xFF6D5444),
+                        tint = palette.pillIcon,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -331,8 +316,8 @@ fun DeckScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Color(0xF2FFFFFF))
-                        .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(16.dp))
+                        .background(palette.pillBg)
+                        .border(1.dp, palette.pillBorder, RoundedCornerShape(16.dp))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
@@ -340,12 +325,12 @@ fun DeckScreen(
                         text = "Card $cardPosition/$remainingCount",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF322117)
+                        color = palette.pillText
                     )
                     Text(
                         text = "$remainingCount remaining",
                         style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFF6D5444)
+                        color = palette.pillTextSecondary
                     )
                     Text(
                         text = "Total ${formatPercent(totalPercent)}",
@@ -361,6 +346,7 @@ fun DeckScreen(
                     text = "Finish",
                     icon = Icons.Filled.DoneAll,
                     onClick = onSubmitDeck,
+                    palette = palette,
                     modifier = Modifier
                 )
             }
@@ -369,6 +355,7 @@ fun DeckScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                palette = palette,
                 dragX = cardDragX,
                 dragY = cardDragY,
                 onDrag = { delta ->
@@ -417,16 +404,18 @@ fun DeckScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp)),
+                            verticalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
+                            // Banner zone: bold accent-colored header
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(Color.White)
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .background(palette.banner)
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
                                 Text(
                                     text = when (state.session?.deckType) {
@@ -435,52 +424,83 @@ fun DeckScreen(
                                         DeckType.REMEDIAL -> "Remedial Deck"
                                         null -> ""
                                     },
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.secondary
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = palette.bannerText.copy(alpha = 0.8f)
                                 )
                                 Text(
                                     text = promptLabelFor(currentCard.type),
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.bannerText
                                 )
+                            }
+
+                            // Content zone: prompt, furigana, instructions
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
                                 val promptFurigana = currentCard.promptFurigana
                                 val shouldRenderFurigana = promptFurigana != null &&
                                     shouldShowFurigana(cardDifficulty = currentCard.difficulty)
                                 val plainJapanesePrompt = promptFurigana?.let(::stripFuriganaMarkup)
-                                if (shouldRenderFurigana) {
+                                if (currentCard.type == CardType.KANJI_MEANING) {
+                                    // Show reading above, then kanji prominently below
+                                    if (!promptFurigana.isNullOrBlank()) {
+                                        Text(
+                                            text = promptFurigana,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = palette.mutedText
+                                        )
+                                    }
+                                    Text(
+                                        text = currentCard.prompt,
+                                        style = MaterialTheme.typography.displayMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = palette.promptText
+                                    )
+                                } else if (shouldRenderFurigana) {
                                     FuriganaText(
                                         text = promptFurigana,
+                                        accentColor = palette.accentText,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     if (shouldShowRomanizedPrompt(prompt = currentCard.prompt, japanesePrompt = plainJapanesePrompt)) {
                                         Text(
                                             text = currentCard.prompt,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = Color(0xFF6A5A48)
+                                            color = palette.mutedText
                                         )
                                     }
                                 } else {
                                     Text(
                                         text = plainJapanesePrompt ?: currentCard.prompt,
                                         style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.SemiBold
+                                        fontWeight = FontWeight.Bold,
+                                        color = palette.promptText
                                     )
                                 }
                                 Text(
                                     text = instructionFor(currentCard.type),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6A5A48)
+                                    color = palette.mutedText
                                 )
                                 if (assistHintPayload != null) {
                                     Text(
                                         text = assistHintPayload.text,
                                         style = MaterialTheme.typography.labelLarge,
-                                        color = Color(0xFF7A4F34),
+                                        color = palette.accentText,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
                                 if (assistHintPayload?.reveal != null) {
                                     LuckyKanjiRevealHint(
                                         reveal = assistHintPayload.reveal,
+                                        palette = palette,
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
@@ -488,7 +508,7 @@ fun DeckScreen(
                                     Text(
                                         text = assistHintPayload?.patternHint.orEmpty(),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = Color(0xFF6A5A48)
+                                        color = palette.mutedText
                                     )
                                 }
                                 if (assistHintPayload?.wordBank?.isNotEmpty() == true) {
@@ -497,6 +517,7 @@ fun DeckScreen(
                                         selectedIndices = wordBankSelection.toSet(),
                                         showFurigana = assistHintPayload.showFurigana,
                                         showRomaji = assistHintPayload.showRomaji,
+                                        palette = palette,
                                         onChunkToggled = { index ->
                                             val updated = toggleWordBankSelection(wordBankSelection, index)
                                             wordBankSelection = updated
@@ -513,7 +534,7 @@ fun DeckScreen(
                                     Text(
                                         text = "Practice card",
                                         style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFF8A4E2C),
+                                        color = palette.accentText,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
@@ -528,6 +549,7 @@ fun DeckScreen(
                                 InkPad(
                                     resetCounter = canvasResetCounter,
                                     onSampleChanged = { sample -> currentSample = sample },
+                                    palette = palette,
                                     modifier = Modifier
                                         .size(padSize)
                                         .aspectRatio(1f)
@@ -537,7 +559,21 @@ fun DeckScreen(
                             ChoiceAnswerPanel(
                                 choices = visibleChoices,
                                 selectedChoice = selectedChoice,
-                                onChoiceSelected = { selectedChoice = it },
+                                onChoiceSelected = { choice ->
+                                    if (submittedChoiceByTap) return@ChoiceAnswerPanel
+                                    submittedChoiceByTap = true
+                                    onSubmitCard(
+                                        currentSample,
+                                        null,
+                                        choice,
+                                        if (assistEnabled) listOf(CARD_ASSIST_ID) else emptyList()
+                                    )
+                                    canvasResetCounter += 1
+                                    currentSample = InkSample(emptyList())
+                                    typedAnswer = ""
+                                    selectedChoice = null
+                                },
+                                palette = palette,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(min = 180.dp)
@@ -567,7 +603,7 @@ fun DeckScreen(
                                 Text(
                                     text = "Expected answer: $canonical",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF6E4331)
+                                    color = palette.expectedAnswer
                                 )
                             }
                         }
@@ -596,25 +632,28 @@ fun DeckScreen(
                 AssistFooter(
                     enabled = assistEnabled,
                     onActivate = { showAssistConfirm = true },
+                    palette = palette,
                     modifier = Modifier.weight(1f)
                 )
-                Button(
-                    onClick = { submitCurrentCard() },
-                    enabled = canSubmit,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF20A557),
-                        disabledContainerColor = Color(0xFFB5D5C1)
-                    ),
-                    modifier = Modifier
-                        .height(64.dp)
-                        .width(102.dp)
-                ) {
-                    Text(
-                        text = "Submit",
-                        color = Color.White,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                if (!isChoiceCard) {
+                    Button(
+                        onClick = { submitCurrentCard() },
+                        enabled = canSubmit,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1A9E5B),
+                            disabledContainerColor = Color(0xFF1A9E5B).copy(alpha = 0.4f)
+                        ),
+                        modifier = Modifier
+                            .height(64.dp)
+                            .width(102.dp)
+                    ) {
+                        Text(
+                            text = "Submit",
+                            color = Color.White,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -629,6 +668,7 @@ fun DeckScreen(
                     DeckType.REMEDIAL -> "Remedial Deck"
                     null -> "Deck"
                 },
+                palette = palette,
                 onDismiss = onDismissGestureOverlay
             )
         }
@@ -864,13 +904,14 @@ private fun DeckActionPill(
     text: String,
     icon: ImageVector,
     onClick: () -> Unit,
+    palette: CardPalette,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xEEFFFFFF))
-            .border(1.dp, Color(0xFFD9B695), RoundedCornerShape(16.dp))
+            .background(palette.pillBg)
+            .border(1.dp, palette.pillBorder, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
@@ -879,13 +920,13 @@ private fun DeckActionPill(
             Icon(
                 imageVector = icon,
                 contentDescription = text,
-                tint = Color(0xFFFF5A00),
+                tint = palette.accentText,
                 modifier = Modifier.size(16.dp)
             )
             Text(
                 text = text,
                 style = MaterialTheme.typography.labelLarge,
-                color = Color(0xFF432B1E),
+                color = palette.pillText,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -895,6 +936,7 @@ private fun DeckActionPill(
 @Composable
 private fun CardStackFrame(
     modifier: Modifier = Modifier.height(600.dp),
+    palette: CardPalette,
     dragX: Float,
     dragY: Float,
     onDrag: (Offset) -> Unit,
@@ -915,8 +957,8 @@ private fun CardStackFrame(
                 .offset(x = 12.dp, y = 10.dp)
                 .rotate(-4f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0x55FFFDF9))
-                .border(1.dp, Color(0x55CEB89E), RoundedCornerShape(20.dp))
+                .background(palette.stackShadow1)
+                .border(1.dp, palette.cardBorder.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
         )
         Box(
             modifier = Modifier
@@ -924,8 +966,8 @@ private fun CardStackFrame(
                 .offset(x = (-8).dp, y = 6.dp)
                 .rotate(3f)
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0x66FFF7EC))
-                .border(1.dp, Color(0x55CEB89E), RoundedCornerShape(20.dp))
+                .background(palette.stackShadow2)
+                .border(1.dp, palette.cardBorder.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
         )
         Box(
             modifier = Modifier
@@ -944,8 +986,8 @@ private fun CardStackFrame(
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFFFFFDF8))
-                    .border(1.dp, Color(0xFFDCC5A9), RoundedCornerShape(20.dp)),
+                    .background(palette.cardBg)
+                    .border(1.dp, palette.cardBorder, RoundedCornerShape(20.dp)),
             ) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
@@ -1042,13 +1084,14 @@ private fun CardStackFrame(
 private fun GestureHelpOverlay(
     heroImageRes: Int,
     deckLabel: String,
+    palette: CardPalette,
     onDismiss: (Boolean) -> Unit
 ) {
     var neverShowAgain by rememberSaveable { mutableStateOf(false) }
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xA61F1510))
+            .background(Color(0xA6101520))
             .padding(horizontal = 20.dp, vertical = 24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -1056,8 +1099,8 @@ private fun GestureHelpOverlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
-                .background(Color(0xFFFFF8EE))
-                .border(1.dp, Color(0xFFE2CDAF), RoundedCornerShape(20.dp)),
+                .background(palette.gestureOverlayBg)
+                .border(1.dp, palette.gestureOverlayBorder, RoundedCornerShape(20.dp)),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Box(
@@ -1188,7 +1231,7 @@ private fun GestureHelpItem(
             Text(
                 text = detail,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF5F4A3B)
+                color = Color(0xFF3A3A3A)
             )
         }
         Box(
@@ -1344,6 +1387,7 @@ private fun promptLabelFor(type: CardType): String {
     return when (type) {
         CardType.KANJI_WRITE -> "English prompt"
         CardType.KANJI_READING -> "Kanji reading"
+        CardType.KANJI_MEANING -> "Kanji meaning"
         CardType.VOCAB_READING -> "Vocab check"
         CardType.GRAMMAR_CHOICE -> "Grammar choice"
         CardType.GRAMMAR_CLOZE_WRITE -> "Grammar cloze"
@@ -1356,6 +1400,7 @@ private fun instructionFor(type: CardType): String {
     return when (type) {
         CardType.KANJI_WRITE -> "Write the matching kanji from memory."
         CardType.KANJI_READING -> "Choose the correct reading for the kanji."
+        CardType.KANJI_MEANING -> "Choose the correct meaning for this kanji."
         CardType.VOCAB_READING -> "Pick the best answer."
         CardType.GRAMMAR_CHOICE -> "Choose the grammar pattern that fits."
         CardType.GRAMMAR_CLOZE_WRITE -> "Type the missing grammar form."
@@ -1392,6 +1437,7 @@ private fun assistHintFor(card: com.kitsune.kanji.japanese.flashcards.domain.mod
             )
         }
 
+        CardType.KANJI_MEANING,
         CardType.KANJI_READING,
         CardType.GRAMMAR_CHOICE,
         CardType.SENTENCE_COMPREHENSION,
@@ -1747,14 +1793,15 @@ private fun balancedRomajiChunks(jpChunks: List<String>, tokens: List<String>): 
 @Composable
 private fun LuckyKanjiRevealHint(
     reveal: LuckyHintReveal,
+    palette: CardPalette,
     modifier: Modifier = Modifier
 ) {
     val cardShape = RoundedCornerShape(12.dp)
     Column(
         modifier = modifier
             .clip(cardShape)
-            .background(Color(0xFFFFF4E7))
-            .border(1.dp, Color(0xFFD7B189), cardShape)
+            .background(palette.hintBg)
+            .border(1.dp, palette.hintBorder, cardShape)
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1762,21 +1809,21 @@ private fun LuckyKanjiRevealHint(
         Text(
             text = luckyRevealLabel(reveal.mode),
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF7A4F34),
+            color = palette.hintLabel,
             fontWeight = FontWeight.SemiBold
         )
         Box(
             modifier = Modifier
                 .size(112.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFFFFFCF7))
-                .border(1.dp, Color(0xFFDCC0A2), RoundedCornerShape(10.dp)),
+                .background(Color.White)
+                .border(1.dp, palette.hintBorder, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = reveal.kanji,
                 modifier = Modifier.partialKanjiReveal(reveal.mode),
-                color = Color(0xFF5C3118),
+                color = palette.hintBody,
                 style = MaterialTheme.typography.displayLarge.copy(
                     fontSize = 80.sp,
                     fontWeight = FontWeight.Bold
@@ -1995,13 +2042,14 @@ private fun ChoiceAnswerPanel(
     choices: List<String>,
     selectedChoice: String?,
     onChoiceSelected: (String) -> Unit,
+    palette: CardPalette,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFFFFFCF6))
-            .border(2.dp, Color(0xFFB89B7A), RoundedCornerShape(16.dp))
+            .background(palette.choiceBg)
+            .border(2.dp, palette.choiceBorder, RoundedCornerShape(16.dp))
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -2014,8 +2062,8 @@ private fun ChoiceAnswerPanel(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (selected) Color(0xFFFFDFC8) else Color(0xFFFFFFFF))
-                        .border(1.dp, Color(0xFFD6B290), RoundedCornerShape(12.dp))
+                        .background(if (selected) palette.choiceSelectedBg else Color.White)
+                        .border(1.dp, palette.choiceBorder, RoundedCornerShape(12.dp))
                         .clickable { onChoiceSelected(option) }
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                 ) {
@@ -2023,7 +2071,7 @@ private fun ChoiceAnswerPanel(
                         text = option,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = Color(0xFF2D1E14)
+                        color = palette.choiceText
                     )
                 }
             }
@@ -2035,6 +2083,7 @@ private fun ChoiceAnswerPanel(
 @Composable
 private fun FuriganaText(
     text: String,
+    accentColor: Color = Color(0xFF7A4F34),
     modifier: Modifier = Modifier
 ) {
     val tokens = remember(text) { parseFuriganaTokens(text) }
@@ -2056,7 +2105,7 @@ private fun FuriganaText(
                     Text(
                         text = token.reading,
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF7A4F34)
+                        color = accentColor
                     )
                     Text(
                         text = token.base,
@@ -2076,21 +2125,22 @@ private fun SentenceWordBankHint(
     selectedIndices: Set<Int>,
     showFurigana: Boolean,
     showRomaji: Boolean,
+    palette: CardPalette,
     onChunkToggled: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFFFFF4E7))
-            .border(1.dp, Color(0xFFD7B189), RoundedCornerShape(12.dp))
+            .background(palette.hintBg)
+            .border(1.dp, palette.hintBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(
             text = "Word bank",
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF7A4F34),
+            color = palette.hintLabel,
             fontWeight = FontWeight.SemiBold
         )
         FlowRow(
@@ -2102,10 +2152,10 @@ private fun SentenceWordBankHint(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (selected) Color(0xFFFFDFC8) else Color(0xFFFFFCF7))
+                        .background(if (selected) palette.choiceSelectedBg else Color.White)
                         .border(
                             1.dp,
-                            if (selected) Color(0xFFFFB17A) else Color(0xFFDCC0A2),
+                            if (selected) palette.accentText else palette.hintBorder,
                             RoundedCornerShape(10.dp)
                         )
                         .clickable { onChunkToggled(index) }
@@ -2119,20 +2169,20 @@ private fun SentenceWordBankHint(
                             Text(
                                 text = chunk.kana,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF7A4F34)
+                                color = palette.hintLabel
                             )
                         }
                         Text(
                             text = chunk.jp,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF5C3118),
+                            color = palette.hintBody,
                             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                         )
                         if (showRomaji && !chunk.romaji.isNullOrBlank()) {
                             Text(
                                 text = chunk.romaji,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF7A4F34)
+                                color = palette.hintLabel
                             )
                         }
                     }
@@ -2171,6 +2221,7 @@ private fun parseFuriganaTokens(text: String): List<FuriganaToken> {
 private fun AssistFooter(
     enabled: Boolean,
     onActivate: () -> Unit,
+    palette: CardPalette,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -2179,7 +2230,7 @@ private fun AssistFooter(
             .background(Color.White)
             .border(
                 1.dp,
-                if (enabled) Color(0xFFFF8C4E) else Color(0xFFFFCCAF),
+                if (enabled) palette.assistBorderOn else palette.assistBorderOff,
                 RoundedCornerShape(14.dp)
             )
             .clickable(enabled = !enabled, onClick = onActivate)
@@ -2189,7 +2240,7 @@ private fun AssistFooter(
         Text(
             text = if (enabled) "Assist On" else "Assist Off",
             style = MaterialTheme.typography.labelLarge,
-            color = if (enabled) Color(0xFF8A3F1C) else Color(0xFF6A5243),
+            color = if (enabled) palette.assistLabelOn else palette.assistLabelOff,
             fontWeight = FontWeight.SemiBold
         )
         Text(
@@ -2199,7 +2250,7 @@ private fun AssistFooter(
                 "Tap to activate a hint for this question."
             },
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF4F3A2E)
+            color = palette.assistBody
         )
     }
 }
@@ -2208,6 +2259,7 @@ private fun AssistFooter(
 private fun InkPad(
     resetCounter: Int,
     onSampleChanged: (InkSample) -> Unit,
+    palette: CardPalette,
     modifier: Modifier = Modifier
 ) {
     var strokes by remember { mutableStateOf(listOf<List<Offset>>()) }
@@ -2227,8 +2279,8 @@ private fun InkPad(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .border(width = 1.dp, color = Color(0xFFBFA489), shape = RoundedCornerShape(16.dp))
-            .background(Color(0xFFFFFCF8))
+            .border(width = 1.dp, color = palette.inkBorder, shape = RoundedCornerShape(16.dp))
+            .background(palette.inkBg)
             .onSizeChanged { size ->
                 canvasSize = size
                 if (strokes.isNotEmpty()) {
@@ -2275,7 +2327,7 @@ private fun InkPad(
         Canvas(modifier = Modifier.fillMaxSize()) {
             val minDimension = min(size.width, size.height)
             val guideStroke = (minDimension * 0.012f).coerceAtLeast(1f)
-            val guideColor = Color(0xFFB9A58F)
+            val guideColor = palette.inkGuide
             val dash = PathEffect.dashPathEffect(
                 intervals = floatArrayOf(minDimension * 0.05f, minDimension * 0.03f)
             )
@@ -2300,7 +2352,7 @@ private fun InkPad(
                 if (stroke.isEmpty()) continue
                 if (stroke.size == 1) {
                     drawCircle(
-                        color = Color(0xFF2B1E17),
+                        color = palette.inkStroke,
                         radius = strokeWidth / 2f,
                         center = stroke.first()
                     )
@@ -2314,7 +2366,7 @@ private fun InkPad(
                 }
                 drawPath(
                     path = path,
-                    color = Color(0xFF2B1E17),
+                    color = palette.inkStroke,
                     style = Stroke(
                         width = strokeWidth,
                         cap = StrokeCap.Round,
@@ -2333,7 +2385,8 @@ private fun InkPad(
             InkToolChip(
                 icon = Icons.Filled.Close,
                 tint = Color(0xFFD44343),
-                label = "Clear"
+                label = "Clear",
+                palette = palette
             ) {
                 undoStack = undoStack + listOf(strokes)
                 strokes = emptyList()
@@ -2341,8 +2394,9 @@ private fun InkPad(
             }
             InkToolChip(
                 icon = Icons.AutoMirrored.Filled.Undo,
-                tint = Color(0xFF6E5A4A),
+                tint = palette.inkToolText,
                 label = "Undo",
+                palette = palette,
                 enabled = undoStack.isNotEmpty()
             ) {
                 if (undoStack.isNotEmpty()) {
@@ -2358,7 +2412,8 @@ private fun InkPad(
             InkToolChip(
                 icon = oppositeModeIcon,
                 tint = oppositeModeTint,
-                label = oppositeModeLabel
+                label = oppositeModeLabel,
+                palette = palette
             ) {
                 isEraseMode = !isEraseMode
             }
@@ -2371,14 +2426,16 @@ private fun InkToolChip(
     icon: ImageVector,
     tint: Color,
     label: String,
+    palette: CardPalette,
     enabled: Boolean = true,
     onClick: () -> Unit
 ) {
+    val disabledColor = palette.inkToolText.copy(alpha = 0.45f)
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .background(if (enabled) Color(0xE6FFF7EC) else Color(0xDDE8E1D4))
-            .border(1.dp, Color(0xFFDBC4A5), RoundedCornerShape(10.dp))
+            .background(if (enabled) palette.inkToolBg else palette.inkToolBg.copy(alpha = 0.4f))
+            .border(1.dp, palette.inkToolBorder, RoundedCornerShape(10.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
@@ -2387,13 +2444,13 @@ private fun InkToolChip(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (enabled) tint else Color(0xFF9E8E7C),
+                tint = if (enabled) tint else disabledColor,
                 modifier = Modifier.size(14.dp)
             )
             Text(
                 text = " $label",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (enabled) Color(0xFF634A39) else Color(0xFF9E8E7C)
+                color = if (enabled) palette.inkToolText else disabledColor
             )
         }
     }
@@ -2431,16 +2488,17 @@ private fun List<List<Offset>>.toInkSample(canvasSize: IntSize): InkSample {
 
 private fun themedDeckBackground(deckType: DeckType?, sourceId: String?): Pair<Int, Color> {
     val key = sourceId?.lowercase().orEmpty()
+    val tint = Color(0xFFFFF8F1)
     return when {
-        key.contains("food") -> Pair(R.drawable.pack_scene_food, Color(0xFFFFE8D2))
-        key.contains("transport") -> Pair(R.drawable.pack_scene_city, Color(0xFFE4F1FF))
-        key.contains("shopping") -> Pair(R.drawable.hero_autumn, Color(0xFFFFEFE0))
-        key.contains("daily_life") -> Pair(R.drawable.pack_scene_temple, Color(0xFFF2E8DD))
-        key.contains("jlpt_n3") -> Pair(R.drawable.hero_autumn, Color(0xFFF4ECFF))
-        key.contains("jlpt_n4") -> Pair(R.drawable.hero_summer, Color(0xFFE8F7FF))
-        key.contains("jlpt_n5") -> Pair(R.drawable.hero_spring, Color(0xFFFFF2E8))
-        deckType == DeckType.DAILY -> Pair(R.drawable.pack_scene_food, Color(0xFFFFE8D2))
-        deckType == DeckType.REMEDIAL -> Pair(R.drawable.pack_scene_temple, Color(0xFFF2E8DD))
-        else -> Pair(R.drawable.pack_scene_city, Color(0xFFEAF1F5))
+        key.contains("food") -> Pair(R.drawable.pack_scene_food, tint)
+        key.contains("transport") -> Pair(R.drawable.pack_scene_city, tint)
+        key.contains("shopping") -> Pair(R.drawable.hero_autumn, tint)
+        key.contains("daily_life") -> Pair(R.drawable.pack_scene_temple, tint)
+        key.contains("jlpt_n3") -> Pair(R.drawable.hero_autumn, tint)
+        key.contains("jlpt_n4") -> Pair(R.drawable.hero_summer, tint)
+        key.contains("jlpt_n5") -> Pair(R.drawable.hero_spring, tint)
+        deckType == DeckType.DAILY -> Pair(R.drawable.pack_scene_food, tint)
+        deckType == DeckType.REMEDIAL -> Pair(R.drawable.pack_scene_temple, tint)
+        else -> Pair(R.drawable.pack_scene_city, tint)
     }
 }

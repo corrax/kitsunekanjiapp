@@ -1336,6 +1336,32 @@ object GoalAlignedSeedContent {
                 templateId = "tmpl_$cardId"
             )
         }
+        // KANJI_MEANING — all levels (meaning recognition, easiest entry point)
+        if (kanji.isNotEmpty()) {
+            val meaningPool = (kanji.map { it.meaning } + vocab.map { it.meaning.trim() }).distinct()
+            cards += kanji.mapIndexed { index, seed ->
+                val cardId = "${trackId}_m_${level}_${index + 1}"
+                val answer = seed.meaning
+                val distractors = meaningPool
+                    .filter { it != answer }
+                    .shuffled(Random(cardId.hashCode()))
+                    .take(3)
+                val choices = (distractors + answer).shuffled(Random(cardId.hashCode() xor 0x5BD1E995.toInt()))
+                CardEntity(
+                    cardId = cardId,
+                    type = CardType.KANJI_MEANING,
+                    prompt = seed.symbol,
+                    canonicalAnswer = answer,
+                    acceptedAnswersRaw = answer,
+                    reading = null,
+                    meaning = answer,
+                    promptFurigana = null,
+                    choicesRaw = choices.joinToString("|"),
+                    difficulty = difficulty,
+                    templateId = "tmpl_$cardId"
+                )
+            }
+        }
         // KANJI_WRITE — difficulty 2+ (production)
         if (difficulty >= 2) {
             cards += kanji.mapIndexed { index, seed ->

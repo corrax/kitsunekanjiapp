@@ -253,7 +253,8 @@ fun KitsuneRoot() {
                             } ?: viewModel.startExamPack(packId)
                         },
                         onThemeSelected = viewModel::onThemeSelected,
-                        onRefresh = viewModel::refreshHome
+                        onRefresh = viewModel::refreshHome,
+                        onProfileClick = { navController.navigate(routeProfile) }
                     )
                 }
 

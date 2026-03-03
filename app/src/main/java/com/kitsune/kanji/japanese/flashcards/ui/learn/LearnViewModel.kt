@@ -38,6 +38,7 @@ data class LearnHubUiState(
     val hasStartedDailyChallenge: Boolean = false,
     val dailyActiveRun: ActiveDeckRunProgress? = null,
     val packs: List<PackProgress> = emptyList(),
+    val packsCache: Map<String, List<PackProgress>> = emptyMap(),
     val availableThemes: List<DeckThemeOption> = deckThemeCatalog,
     val selectedThemeId: String = deckThemeCatalog.firstOrNull()?.id ?: "jlpt_n5",
     val selectedTrackId: String = "jlpt_n5_core",
@@ -105,10 +106,19 @@ class LearnViewModel(
             if (!trackId.isNullOrBlank()) {
                 deckSelectionPreferences.setSelectedTrackId(trackId)
             }
+            // Show cached packs immediately (if available) — no rank/daily reload on swipe
             _uiState.update {
-                it.copy(selectedThemeId = theme.id, selectedTrackId = trackId)
+                val cached = it.packsCache[theme.id]
+                it.copy(
+                    selectedThemeId = theme.id,
+                    selectedTrackId = trackId,
+                    packs = cached ?: it.packs
+                )
             }
-            loadHome()
+            // Only fetch packs for this theme if not already cached
+            if (_uiState.value.packsCache[theme.id] == null) {
+                loadPacksForTheme(trackId, theme.id)
+            }
         }
     }
 
@@ -130,7 +140,8 @@ class LearnViewModel(
                         rankSummary = snapshot.rankSummary,
                         hasStartedDailyChallenge = snapshot.hasStartedDailyChallenge,
                         dailyActiveRun = snapshot.dailyActiveRun,
-                        packs = snapshot.packs
+                        packs = snapshot.packs,
+                        packsCache = it.packsCache + (it.selectedThemeId to snapshot.packs)
                     )
                 }
             }.onFailure { error ->
@@ -139,6 +150,27 @@ class LearnViewModel(
                         isLoading = false,
                         errorMessage = error.message ?: "Failed to load content."
                     )
+                }
+            }
+        }
+    }
+
+    private fun loadPacksForTheme(trackId: String, themeId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            runCatching {
+                repository.getHomeSnapshot(trackId)
+            }.onSuccess { snapshot ->
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        packs = snapshot.packs,
+                        packsCache = it.packsCache + (themeId to snapshot.packs)
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(isLoading = false, errorMessage = error.message ?: "Failed to load content.")
                 }
             }
         }

@@ -4,6 +4,8 @@ const val SCORE_EXCELLENT_MIN = 80
 const val SCORE_GOOD_MIN = 65
 const val SCORE_OK_MIN = 45
 const val SCORE_REINFORCEMENT_CUTOFF = 50
+const val RECOGNITION_MASTERY_THRESHOLD = 65
+const val RECOGNITION_MIN_SAMPLES = 3
 private const val ASSIST_SCORE_REDUCTION_FACTOR = 0.8f
 
 enum class ScoreBand {

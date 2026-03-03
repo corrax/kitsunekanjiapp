@@ -198,6 +198,22 @@ interface KitsuneDao {
 
     @Query(
         """
+        SELECT c.difficulty,
+               AVG(ca.scoreEffective) AS avgScore,
+               COUNT(ca.attemptId) AS sampleCount
+        FROM card_attempts ca
+        INNER JOIN cards c ON c.cardId = ca.cardId
+        INNER JOIN pack_cards pc ON pc.cardId = ca.cardId
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE p.trackId = :trackId
+          AND c.type IN ('KANJI_MEANING', 'KANJI_READING')
+        GROUP BY c.difficulty
+        """
+    )
+    suspend fun getRecognitionMasteryByDifficulty(trackId: String): List<RecognitionMasteryRow>
+
+    @Query(
+        """
         SELECT c.* FROM cards c
         INNER JOIN pack_cards pc ON c.cardId = pc.cardId
         WHERE pc.packId = :packId
@@ -437,6 +453,12 @@ data class DeckCardRow(
 data class DifficultyScoreSnapshotRow(
     val easyAverage: Double?,
     val hardAverage: Double?
+)
+
+data class RecognitionMasteryRow(
+    val difficulty: Int,
+    val avgScore: Double?,
+    val sampleCount: Int
 )
 
 data class ScoreAccomplishmentRow(

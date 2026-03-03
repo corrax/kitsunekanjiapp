@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -68,7 +69,8 @@ fun LearnScreen(
     onStartDailyDeck: () -> Unit,
     onStartExamPack: (String) -> Unit,
     onThemeSelected: (DeckThemeOption) -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onProfileClick: () -> Unit = {}
 ) {
     val themes = state.availableThemes
 
@@ -108,6 +110,7 @@ fun LearnScreen(
             item {
                 ProfileHeaderSection(
                     state = state,
+                    onClick = onProfileClick,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 )
             }
@@ -150,17 +153,19 @@ fun LearnScreen(
             item {
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
                 ) { page ->
                     val theme = themes.getOrNull(page)
                     if (theme != null) {
                         DeckCategoryCard(
                             theme = theme,
-                            packs = if (theme.id == state.selectedThemeId) state.packs else emptyList(),
-                            isLoadingPacks = state.isLoading && theme.id == state.selectedThemeId,
+                            packs = state.packsCache[theme.id] ?: emptyList(),
                             startingPackId = state.startingPackId,
                             onPackSelected = onStartExamPack,
-                            modifier = Modifier.padding(horizontal = 16.dp)
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .heightIn(min = 380.dp)
                         )
                     }
                 }
@@ -212,6 +217,7 @@ fun LearnScreen(
 @Composable
 private fun ProfileHeaderSection(
     state: LearnHubUiState,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val rank = state.rankSummary
@@ -220,7 +226,9 @@ private fun ProfileHeaderSection(
     } else 0f
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = WarmSurface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -270,8 +278,8 @@ private fun ProfileHeaderSection(
                         progress = { wordsProgress },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp)),
+                            .height(10.dp)
+                            .clip(RoundedCornerShape(5.dp)),
                         color = AccentOrange,
                         trackColor = BorderLight
                     )
@@ -439,7 +447,6 @@ private fun DailyChallengeFeaturedCard(
 private fun DeckCategoryCard(
     theme: DeckThemeOption,
     packs: List<PackProgress>,
-    isLoadingPacks: Boolean,
     startingPackId: String?,
     onPackSelected: (String) -> Unit,
     modifier: Modifier = Modifier
@@ -501,21 +508,8 @@ private fun DeckCategoryCard(
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
             ) {
-                if (isLoadingPacks) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = visuals.accent,
-                            strokeWidth = 2.dp
-                        )
-                    }
-                } else if (packs.isEmpty()) {
-                    // No packs loaded yet — show level names from catalog
+                if (packs.isEmpty()) {
+                    // Packs loading or not yet visited — show catalog level names at correct height
                     theme.levels.forEach { level ->
                         PackPlaceholderRow(
                             levelName = level.name,

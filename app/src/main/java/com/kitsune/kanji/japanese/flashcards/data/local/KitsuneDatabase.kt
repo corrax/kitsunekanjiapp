@@ -33,7 +33,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.WritingTemplateEn
         StreakStateEntity::class,
         TrackAbilityEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
