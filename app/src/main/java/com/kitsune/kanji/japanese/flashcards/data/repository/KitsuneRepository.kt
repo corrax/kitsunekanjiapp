@@ -33,7 +33,9 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunReport
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckResult
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckSession
 import com.kitsune.kanji.japanese.flashcards.domain.model.HomeSnapshot
+import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelDetail
 import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelProgress
+import com.kitsune.kanji.japanese.flashcards.domain.model.SkillBreakdown
 import com.kitsune.kanji.japanese.flashcards.domain.model.KanjiAttemptHistoryItem
 import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
@@ -61,6 +63,7 @@ interface KitsuneRepository {
     suspend fun initialize()
     suspend fun getHomeSnapshot(trackId: String): HomeSnapshot
     suspend fun getJlptLevelProgress(): List<JlptLevelProgress>
+    suspend fun getJlptLevelDetails(): List<JlptLevelDetail>
     suspend fun dismissDailyReminder()
     suspend fun createOrLoadDailyDeck(trackId: String): DeckSession
     suspend fun createOrLoadExamDeck(packId: String): DeckSession
@@ -212,6 +215,66 @@ class KitsuneRepositoryImpl(
                 totalCount = totalCount
             )
         }
+    }
+
+    override suspend fun getJlptLevelDetails(): List<JlptLevelDetail> {
+        return jlptTrackMapping.map { (level, trackId) ->
+            val totalCount = dao.getTrackCardCount(trackId)
+            val answeredCount = dao.getAttemptedCardCountForTrack(trackId).coerceAtMost(totalCount)
+            val packs = dao.getPacks(trackId)
+            val progressMap = dao.getPackProgress(packs.map { it.packId }).associateBy { it.packId }
+            val packStatuses = packs.map { pack ->
+                progressMap[pack.packId]?.status ?: PackProgressStatus.LOCKED
+            }
+            val packsPassed = packStatuses.count { it == PackProgressStatus.PASSED }
+            val skills = buildSkillBreakdown(trackId)
+            JlptLevelDetail(
+                level = level,
+                trackId = trackId,
+                answeredCount = answeredCount,
+                totalCount = totalCount,
+                packsPassed = packsPassed,
+                packsTotal = packs.size,
+                packStatuses = packStatuses,
+                skills = skills
+            )
+        }
+    }
+
+    private suspend fun buildSkillBreakdown(trackId: String): List<SkillBreakdown> {
+        val rows = dao.getAverageScoresByCardTypeForTrack(trackId)
+        val byType = rows.associateBy { it.cardType }
+
+        fun single(type: CardType, label: String): SkillBreakdown {
+            val row = byType[type]
+            return SkillBreakdown(
+                label = label,
+                avgScore = row?.avgScore?.toInt() ?: 0,
+                attemptCount = row?.attemptCount ?: 0
+            )
+        }
+
+        fun combined(types: List<CardType>, label: String): SkillBreakdown {
+            val matching = rows.filter { it.cardType in types }
+            val totalAttempts = matching.sumOf { it.attemptCount }
+            val weightedAvg = if (totalAttempts > 0)
+                matching.sumOf { it.avgScore * it.attemptCount } / totalAttempts
+            else 0.0
+            return SkillBreakdown(
+                label = label,
+                avgScore = weightedAvg.toInt(),
+                attemptCount = totalAttempts
+            )
+        }
+
+        return listOf(
+            single(CardType.KANJI_MEANING, "Recognition"),
+            single(CardType.VOCAB_READING, "Vocabulary"),
+            single(CardType.KANJI_READING, "Reading"),
+            single(CardType.KANJI_WRITE, "Writing"),
+            combined(listOf(CardType.GRAMMAR_CHOICE, CardType.GRAMMAR_CLOZE_WRITE), "Grammar"),
+            combined(listOf(CardType.SENTENCE_COMPREHENSION, CardType.SENTENCE_BUILD), "Sentences")
+        )
     }
 
     override suspend fun dismissDailyReminder() {

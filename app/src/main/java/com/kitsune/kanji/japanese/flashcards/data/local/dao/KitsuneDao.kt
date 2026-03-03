@@ -214,6 +214,21 @@ interface KitsuneDao {
 
     @Query(
         """
+        SELECT c.type AS cardType,
+               AVG(ca.scoreTotal) AS avgScore,
+               COUNT(ca.attemptId) AS attemptCount
+        FROM card_attempts ca
+        INNER JOIN cards c ON c.cardId = ca.cardId
+        INNER JOIN pack_cards pc ON pc.cardId = ca.cardId
+        INNER JOIN packs p ON p.packId = pc.packId
+        WHERE p.trackId = :trackId
+        GROUP BY c.type
+        """
+    )
+    suspend fun getAverageScoresByCardTypeForTrack(trackId: String): List<CardTypeScoreRow>
+
+    @Query(
+        """
         SELECT c.* FROM cards c
         INNER JOIN pack_cards pc ON c.cardId = pc.cardId
         WHERE pc.packId = :packId
@@ -520,4 +535,10 @@ data class ActiveDeckRunProgressRow(
     val deckRunId: String,
     val cardsReviewed: Int,
     val totalCards: Int
+)
+
+data class CardTypeScoreRow(
+    val cardType: CardType,
+    val avgScore: Double,
+    val attemptCount: Int
 )

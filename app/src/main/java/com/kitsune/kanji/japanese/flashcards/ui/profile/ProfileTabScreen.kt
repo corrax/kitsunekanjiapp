@@ -2,10 +2,13 @@ package com.kitsune.kanji.japanese.flashcards.ui.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -25,21 +30,28 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.DeckType
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
-import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelProgress
+import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelDetail
+import com.kitsune.kanji.japanese.flashcards.domain.model.SkillBreakdown
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
 import com.kitsune.kanji.japanese.flashcards.ui.common.deckThemeDrawnVisuals
+import com.kitsune.kanji.japanese.flashcards.ui.common.scoreVisualFor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -47,6 +59,7 @@ import java.util.Locale
 private val WarmSurface = Color(0xFFFFF8F1)
 private val AccentOrange = Color(0xFFFF5A00)
 private val TextDark = Color(0xFF2D1E14)
+private val TextMuted = Color(0xFF7A6355)
 
 data class ProfileTabUiState(
     val isLoading: Boolean = true,
@@ -62,7 +75,10 @@ data class ProfileTabUiState(
     ),
     val lifetimeScore: Int = 0,
     val lifetimeCardsReviewed: Int = 0,
-    val jlptProgress: List<JlptLevelProgress> = defaultJlptProgress(),
+    val currentStreak: Int = 0,
+    val bestStreak: Int = 0,
+    val jlptLevelDetails: List<JlptLevelDetail> = emptyList(),
+    val selectedLevelIndex: Int = 0,
     val recentRuns: List<DeckRunHistoryItem> = emptyList(),
     val errorMessage: String? = null
 )
@@ -71,7 +87,8 @@ data class ProfileTabUiState(
 fun ProfileTabScreen(
     state: ProfileTabUiState,
     onOpenRunReport: (String) -> Unit,
-    onOpenUpgrade: () -> Unit
+    onOpenUpgrade: () -> Unit,
+    onPageChanged: (Int) -> Unit
 ) {
     val visuals = deckThemeDrawnVisuals(state.selectedThemeId)
     if (state.isLoading) {
@@ -79,6 +96,16 @@ fun ProfileTabScreen(
             CircularProgressIndicator()
         }
         return
+    }
+
+    val pagerState = rememberPagerState(initialPage = state.selectedLevelIndex) {
+        state.jlptLevelDetails.size.coerceAtLeast(1)
+    }
+
+    LaunchedEffect(pagerState.currentPage) {
+        if (pagerState.currentPage != state.selectedLevelIndex) {
+            onPageChanged(pagerState.currentPage)
+        }
     }
 
     Box(
@@ -130,14 +157,13 @@ fun ProfileTabScreen(
                         color = TextDark
                     )
                 }
-                Spacer(Modifier.height(4.dp))
                 state.errorMessage?.let { message ->
+                    Spacer(Modifier.height(8.dp))
                     Text(
                         text = message,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
-                    Spacer(Modifier.height(8.dp))
                 }
             }
 
@@ -149,22 +175,51 @@ fun ProfileTabScreen(
                 StatsRow(
                     lifetimeScore = state.lifetimeScore,
                     lifetimeCardsReviewed = state.lifetimeCardsReviewed,
-                    wordsCovered = state.rankSummary.wordsCovered
+                    wordsCovered = state.rankSummary.wordsCovered,
+                    currentStreak = state.currentStreak
                 )
             }
 
-            item {
-                Text(
-                    text = "JLPT Progress (N5 to N1)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextDark,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
+            if (state.jlptLevelDetails.isNotEmpty()) {
+                item {
+                    Text(
+                        text = "JLPT Progress",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextDark,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
 
-            items(state.jlptProgress) { progress ->
-                JlptProgressCard(progress = progress)
+                item {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) { page ->
+                        val detail = state.jlptLevelDetails.getOrNull(page)
+                        if (detail != null) {
+                            HeroLevelCard(detail = detail, modifier = Modifier.padding(horizontal = 2.dp))
+                        }
+                    }
+                }
+
+                item {
+                    PagerDotIndicators(
+                        count = state.jlptLevelDetails.size,
+                        currentPage = pagerState.currentPage
+                    )
+                }
+
+                val currentDetail = state.jlptLevelDetails.getOrNull(state.selectedLevelIndex)
+                if (currentDetail != null && currentDetail.totalCount > 0) {
+                    item {
+                        SkillBreakdownSection(
+                            level = currentDetail.level,
+                            skills = currentDetail.skills
+                        )
+                    }
+                }
             }
 
             if (state.recentRuns.isNotEmpty()) {
@@ -192,59 +247,207 @@ fun ProfileTabScreen(
 }
 
 @Composable
-private fun JlptProgressCard(progress: JlptLevelProgress) {
-    val percent = if (progress.totalCount > 0) {
-        ((progress.completionRatio * 100f).toInt()).coerceIn(0, 100)
-    } else {
-        0
-    }
+private fun HeroLevelCard(detail: JlptLevelDetail, modifier: Modifier = Modifier) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = WarmSurface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = progress.level,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextDark
-                )
-                Text(
-                    text = if (progress.totalCount > 0) {
-                        "${progress.answeredCount}/${progress.totalCount} ($percent%)"
-                    } else {
-                        "0/0"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF7A6355)
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { progress.completionRatio },
+        Column {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = AccentOrange,
-                trackColor = Color(0xFFFFE0CC)
+                    .height(4.dp)
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(AccentOrange, Color(0xFFFF8C4E), Color(0x00FF8C4E))
+                        ),
+                        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+                    )
             )
-            if (progress.totalCount == 0) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "No JLPT ${progress.level} question bank seeded yet.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF7A6355)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = detail.level,
+                        fontSize = 56.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextDark,
+                        lineHeight = 60.sp
+                    )
+                    Text(
+                        text = if (detail.totalCount > 0) {
+                            "${detail.answeredCount} / ${detail.totalCount} cards seen"
+                        } else {
+                            "Coming soon"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted
+                    )
+                    if (detail.packsTotal > 0) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "${detail.packsPassed} / ${detail.packsTotal} packs passed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
+                    }
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(88.dp)
+                ) {
+                    CircularProgressIndicator(
+                        progress = { 1f },
+                        modifier = Modifier.size(88.dp),
+                        color = Color(0xFFFFE0CC),
+                        strokeWidth = 8.dp,
+                        strokeCap = StrokeCap.Round
+                    )
+                    CircularProgressIndicator(
+                        progress = { detail.completionRatio },
+                        modifier = Modifier.size(88.dp),
+                        color = AccentOrange,
+                        strokeWidth = 8.dp,
+                        strokeCap = StrokeCap.Round
+                    )
+                    val pct = (detail.completionRatio * 100).toInt()
+                    Text(
+                        text = "$pct%",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+            if (detail.packStatuses.isNotEmpty()) {
+                PackDotRow(
+                    statuses = detail.packStatuses,
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 16.dp)
                 )
             }
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PackDotRow(statuses: List<PackProgressStatus>, modifier: Modifier = Modifier) {
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        statuses.forEach { status ->
+            when (status) {
+                PackProgressStatus.PASSED -> Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(AccentOrange)
+                )
+                PackProgressStatus.UNLOCKED -> Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, AccentOrange, CircleShape)
+                )
+                PackProgressStatus.LOCKED -> Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFE0D5CC))
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PagerDotIndicators(count: Int, currentPage: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        repeat(count) { index ->
+            val isSelected = index == currentPage
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 3.dp)
+                    .size(if (isSelected) 8.dp else 6.dp)
+                    .clip(CircleShape)
+                    .background(if (isSelected) AccentOrange else Color(0xFFE0D5CC))
+            )
+        }
+    }
+}
+
+@Composable
+private fun SkillBreakdownSection(level: String, skills: List<SkillBreakdown>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = WarmSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "$level Skills",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = TextDark
+            )
+            Spacer(Modifier.height(12.dp))
+            skills.forEach { skill ->
+                SkillBar(skill = skill)
+                Spacer(Modifier.height(10.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkillBar(skill: SkillBreakdown) {
+    val hasAttempts = skill.attemptCount > 0
+    val barColor = if (hasAttempts) scoreVisualFor(skill.avgScore).toneColor else Color(0xFFE0D5CC)
+    val progress = if (hasAttempts) skill.avgScore / 100f else 0f
+    val scoreText = if (hasAttempts) "${skill.avgScore}%" else "Not started"
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = skill.label,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (hasAttempts) TextDark else TextMuted,
+            modifier = Modifier.width(90.dp)
+        )
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .weight(1f)
+                .height(7.dp)
+                .clip(RoundedCornerShape(4.dp)),
+            color = barColor,
+            trackColor = Color(0xFFFFE0CC)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = scoreText,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (hasAttempts) barColor else TextMuted,
+            fontWeight = if (hasAttempts) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.width(56.dp),
+            textAlign = TextAlign.End
+        )
     }
 }
 
@@ -257,7 +460,6 @@ private fun RankCard(rankSummary: UserRankSummary) {
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column {
-            // Orange accent gradient at top
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -273,7 +475,7 @@ private fun RankCard(rankSummary: UserRankSummary) {
                 Text(
                     text = "Kitsune Learner",
                     style = MaterialTheme.typography.labelMedium,
-                    color = Color(0xFF7A6355)
+                    color = TextMuted
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -285,13 +487,13 @@ private fun RankCard(rankSummary: UserRankSummary) {
                 Text(
                     text = "Level ${rankSummary.level} \u2022 Rating ${rankSummary.hiddenRating}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF7A6355)
+                    color = TextMuted
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = "${rankSummary.wordsCovered} / ${rankSummary.totalWords} words covered",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF7A6355)
+                    color = TextMuted
                 )
             }
         }
@@ -302,25 +504,19 @@ private fun RankCard(rankSummary: UserRankSummary) {
 private fun StatsRow(
     lifetimeScore: Int,
     lifetimeCardsReviewed: Int,
-    wordsCovered: Int
+    wordsCovered: Int,
+    currentStreak: Int
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        StatCard(label = "Score", value = "$lifetimeScore", modifier = Modifier.weight(1f))
+        StatCard(label = "Cards", value = "$lifetimeCardsReviewed", modifier = Modifier.weight(1f))
+        StatCard(label = "Words", value = "$wordsCovered", modifier = Modifier.weight(1f))
         StatCard(
-            label = "Score",
-            value = "$lifetimeScore",
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            label = "Cards",
-            value = "$lifetimeCardsReviewed",
-            modifier = Modifier.weight(1f)
-        )
-        StatCard(
-            label = "Words",
-            value = "$wordsCovered",
+            label = "Streak",
+            value = "\uD83D\uDD25 $currentStreak",
             modifier = Modifier.weight(1f)
         )
     }
@@ -335,19 +531,19 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = TextDark
             )
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF7A6355)
+                color = TextMuted
             )
         }
     }
@@ -381,7 +577,7 @@ private fun RunHistoryCard(run: DeckRunHistoryItem, onClick: () -> Unit) {
                 Text(
                     text = "$typeLabel \u2022 $dateStr",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF7A6355)
+                    color = TextMuted
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
@@ -405,19 +601,9 @@ private fun RunHistoryCard(run: DeckRunHistoryItem, onClick: () -> Unit) {
                 Text(
                     text = run.grade,
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF7A6355)
+                    color = TextMuted
                 )
             }
         }
     }
-}
-
-private fun defaultJlptProgress(): List<JlptLevelProgress> {
-    return listOf(
-        JlptLevelProgress(level = "N5", trackId = "jlpt_n5_core", answeredCount = 0, totalCount = 0),
-        JlptLevelProgress(level = "N4", trackId = "jlpt_n4_core", answeredCount = 0, totalCount = 0),
-        JlptLevelProgress(level = "N3", trackId = "jlpt_n3_core", answeredCount = 0, totalCount = 0),
-        JlptLevelProgress(level = "N2", trackId = "jlpt_n2_core", answeredCount = 0, totalCount = 0),
-        JlptLevelProgress(level = "N1", trackId = "jlpt_n1_core", answeredCount = 0, totalCount = 0)
-    )
 }

@@ -158,6 +158,26 @@ data class DeckRunCardReport(
     val comment: String?
 )
 
+data class SkillBreakdown(
+    val label: String,
+    val avgScore: Int,
+    val attemptCount: Int
+)
+
+data class JlptLevelDetail(
+    val level: String,
+    val trackId: String,
+    val answeredCount: Int,
+    val totalCount: Int,
+    val packsPassed: Int,
+    val packsTotal: Int,
+    val packStatuses: List<PackProgressStatus>,
+    val skills: List<SkillBreakdown>
+) {
+    val completionRatio: Float
+        get() = if (totalCount <= 0) 0f else (answeredCount.toFloat() / totalCount.toFloat()).coerceIn(0f, 1f)
+}
+
 data class KanjiAttemptHistoryItem(
     val attemptId: String,
     val deckRunId: String,

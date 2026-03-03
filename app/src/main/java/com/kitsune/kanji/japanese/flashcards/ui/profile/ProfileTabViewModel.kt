@@ -8,7 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
-import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelProgress
+import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelDetail
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,14 +35,16 @@ class ProfileTabViewModel(
                 val trackId = deckSelectionPreferences.getSelectedTrackId("jlpt_n5_core")
                 val snapshot = repository.getHomeSnapshot(trackId)
                 val recentRuns = repository.getDeckRunHistory(limit = 30)
-                val jlptProgress = repository.getJlptLevelProgress()
+                val jlptLevelDetails = repository.getJlptLevelDetails()
                 ProfilePayload(
                     selectedThemeId = selectedThemeId,
                     lifetimeScore = snapshot.lifetimeScore,
                     lifetimeCardsReviewed = snapshot.lifetimeCardsReviewed,
                     rankSummary = snapshot.rankSummary,
                     recentRuns = recentRuns,
-                    jlptProgress = jlptProgress
+                    jlptLevelDetails = jlptLevelDetails,
+                    currentStreak = snapshot.currentStreak,
+                    bestStreak = snapshot.bestStreak
                 )
             }.onSuccess { payload ->
                 _uiState.update {
@@ -53,7 +55,9 @@ class ProfileTabViewModel(
                         lifetimeScore = payload.lifetimeScore,
                         lifetimeCardsReviewed = payload.lifetimeCardsReviewed,
                         recentRuns = payload.recentRuns,
-                        jlptProgress = payload.jlptProgress,
+                        jlptLevelDetails = payload.jlptLevelDetails,
+                        currentStreak = payload.currentStreak,
+                        bestStreak = payload.bestStreak,
                         errorMessage = null
                     )
                 }
@@ -66,6 +70,10 @@ class ProfileTabViewModel(
                 }
             }
         }
+    }
+
+    fun onPageChanged(index: Int) {
+        _uiState.update { it.copy(selectedLevelIndex = index) }
     }
 
     companion object {
@@ -89,5 +97,7 @@ private data class ProfilePayload(
     val lifetimeScore: Int,
     val lifetimeCardsReviewed: Int,
     val recentRuns: List<DeckRunHistoryItem>,
-    val jlptProgress: List<JlptLevelProgress>
+    val jlptLevelDetails: List<JlptLevelDetail>,
+    val currentStreak: Int,
+    val bestStreak: Int
 )

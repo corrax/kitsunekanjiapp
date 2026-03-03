@@ -303,7 +303,8 @@ fun KitsuneRoot() {
                         onOpenRunReport = { runId ->
                             navController.navigate("$routeDeckReport/$runId")
                         },
-                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
+                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") },
+                        onPageChanged = viewModel::onPageChanged
                     )
                 }
 
