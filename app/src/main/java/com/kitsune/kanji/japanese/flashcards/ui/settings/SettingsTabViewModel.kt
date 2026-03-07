@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DailySchedulePreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
@@ -13,6 +14,9 @@ import com.kitsune.kanji.japanese.flashcards.domain.time.DailySchedule
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -20,11 +24,17 @@ import java.time.format.DateTimeFormatter
 class SettingsTabViewModel(
     private val dailySchedulePreferences: DailySchedulePreferences,
     private val onboardingPreferences: OnboardingPreferences,
-    private val deckSelectionPreferences: DeckSelectionPreferences
+    private val deckSelectionPreferences: DeckSelectionPreferences,
+    private val billingPreferences: BillingPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsTabUiState())
-    val uiState = _uiState.asStateFlow()
+    val uiState = combine(
+        _uiState,
+        billingPreferences.entitlementFlow
+    ) { state, entitlement ->
+        state.copy(isPlusEntitled = entitlement.isPlusEntitled)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), _uiState.value)
 
     init {
         viewModelScope.launch {
@@ -100,13 +110,15 @@ class SettingsTabViewModel(
         fun factory(
             dailySchedulePreferences: DailySchedulePreferences,
             onboardingPreferences: OnboardingPreferences,
-            deckSelectionPreferences: DeckSelectionPreferences
+            deckSelectionPreferences: DeckSelectionPreferences,
+            billingPreferences: BillingPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 SettingsTabViewModel(
                     dailySchedulePreferences = dailySchedulePreferences,
                     onboardingPreferences = onboardingPreferences,
-                    deckSelectionPreferences = deckSelectionPreferences
+                    deckSelectionPreferences = deckSelectionPreferences,
+                    billingPreferences = billingPreferences
                 )
             }
         }

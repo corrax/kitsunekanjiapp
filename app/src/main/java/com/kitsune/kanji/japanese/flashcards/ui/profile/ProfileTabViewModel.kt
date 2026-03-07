@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.model.DeckRunHistoryItem
@@ -12,12 +14,15 @@ import com.kitsune.kanji.japanese.flashcards.domain.model.JlptLevelDetail
 import com.kitsune.kanji.japanese.flashcards.domain.model.UserRankSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ProfileTabViewModel(
     private val repository: KitsuneRepository,
-    private val deckSelectionPreferences: DeckSelectionPreferences
+    private val deckSelectionPreferences: DeckSelectionPreferences,
+    private val billingPreferences: BillingPreferences,
+    private val captureQuotaPreferences: CaptureQuotaPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileTabUiState())
@@ -25,6 +30,21 @@ class ProfileTabViewModel(
 
     init {
         load()
+        viewModelScope.launch {
+            combine(
+                billingPreferences.entitlementFlow,
+                captureQuotaPreferences.weeklyUsedFlow
+            ) { entitlement, used -> entitlement to used }
+                .collect { (entitlement, used) ->
+                    _uiState.update {
+                        it.copy(
+                            isPlusEntitled = entitlement.isPlusEntitled,
+                            capturesUsedThisWeek = used,
+                            freeWeeklyLimit = CaptureQuotaPreferences.FREE_WEEKLY_LIMIT
+                        )
+                    }
+                }
+        }
     }
 
     fun load() {
@@ -79,12 +99,16 @@ class ProfileTabViewModel(
     companion object {
         fun factory(
             repository: KitsuneRepository,
-            deckSelectionPreferences: DeckSelectionPreferences
+            deckSelectionPreferences: DeckSelectionPreferences,
+            billingPreferences: BillingPreferences,
+            captureQuotaPreferences: CaptureQuotaPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 ProfileTabViewModel(
                     repository = repository,
-                    deckSelectionPreferences = deckSelectionPreferences
+                    deckSelectionPreferences = deckSelectionPreferences,
+                    billingPreferences = billingPreferences,
+                    captureQuotaPreferences = captureQuotaPreferences
                 )
             }
         }

@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Notifications
@@ -45,11 +46,13 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,8 +77,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.kitsune.kanji.japanese.flashcards.R
+import com.kitsune.kanji.japanese.flashcards.data.billing.BillingManager
 import com.kitsune.kanji.japanese.flashcards.data.local.EducationalGoal
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
+import com.kitsune.kanji.japanese.flashcards.ui.billing.InlinePaywallContent
 import com.kitsune.kanji.japanese.flashcards.ui.common.deckThemeDrawnVisuals
 import com.kitsune.kanji.japanese.flashcards.ui.deckbrowser.deckThemeCatalog
 import kotlinx.coroutines.launch
@@ -88,9 +93,9 @@ data class OnboardingSelection(
 
 @Composable
 fun OnboardingScreen(
+    billingManager: BillingManager,
     onCompleteFree: (OnboardingSelection) -> Unit,
-    onStartTrial: (OnboardingSelection) -> Unit,
-    onChoosePlan: (OnboardingSelection) -> Unit
+    onActivated: (OnboardingSelection) -> Unit
 ) {
     var selectedLevel by rememberSaveable { mutableStateOf(LearnerLevel.BEGINNER_N5.name) }
     var selectedGoal by rememberSaveable { mutableStateOf(EducationalGoal.CASUAL.name) }
@@ -226,7 +231,10 @@ fun OnboardingScreen(
                         else -> PlansSlide(
                             learnerLevel = learnerLevel,
                             educationalGoal = educationalGoal,
+                            billingManager = billingManager,
+                            selection = onboardingSelection,
                             onCompleteFree = { onCompleteFree(onboardingSelection) },
+                            onActivated = { onActivated(onboardingSelection) },
                             modifier = slideModifier
                         )
                     }
@@ -361,7 +369,7 @@ private fun GoalSetupSlide(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_kitsune_brand),
+                painter = painterResource(id = R.drawable.ic_launcher_playstore),
                 contentDescription = "Kitsune",
                 modifier = Modifier.size(44.dp)
             )
@@ -658,7 +666,7 @@ private fun ReminderSlide(
     val title = if (isPermissionGranted) {
         "Daily reminders enabled"
     } else {
-        "Stay on your streak"
+        "Stay On Your Streak"
     }
 
     val body = if (!isPermissionSupported) {
@@ -747,39 +755,40 @@ private fun ReminderSlide(
 private fun PlansSlide(
     learnerLevel: LearnerLevel,
     educationalGoal: EducationalGoal,
+    billingManager: BillingManager,
+    selection: OnboardingSelection,
     onCompleteFree: () -> Unit,
+    onActivated: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // Japan-themed background decorations
         JapanDecorations(SlideDecoration.SAKURA)
 
         Column(
             modifier = modifier.verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.Center
         ) {
-            // Brand fox icon
             Image(
-                painter = painterResource(id = R.drawable.ic_kitsune_brand),
+                painter = painterResource(id = R.drawable.ic_launcher_playstore),
                 contentDescription = null,
-                modifier = Modifier.size(56.dp)
+                modifier = Modifier.size(52.dp)
             )
-            Spacer(modifier = Modifier.height(14.dp))
-
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "You\u2019re All Set",
+                text = "Snap It. Learn It. Remember It.",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2D1E14)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = summaryForSelection(educationalGoal, learnerLevel),
+                text = "Point your camera at any Japanese text and Kitsune turns it into a flashcard queued straight into your daily deck.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF7A6355)
             )
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Feature comparison card
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFEFBF7)),
                 shape = RoundedCornerShape(16.dp),
@@ -790,49 +799,87 @@ private fun PlansSlide(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    ValueBullet("5-minute daily decks \u2014 short enough to finish, long enough to stick.")
-                    ValueBullet("See real progress fast: Kitsune adapts to your weak spots automatically.")
-                    ValueBullet("Snap any Japanese text with your camera and turn it into practice cards.")
+                    PlanFeatureRow(
+                        feature = "Camera capture → daily deck cards",
+                        freeValue = "3 / week",
+                        plusValue = "Unlimited"
+                    )
+                    PlanFeatureRow(
+                        feature = "Daily quiz decks",
+                        freeValue = "\u2713",
+                        plusValue = "\u2713"
+                    )
+                    PlanFeatureRow(
+                        feature = "All topic tracks",
+                        freeValue = "\u2713",
+                        plusValue = "\u2713"
+                    )
+                    PlanFeatureRow(
+                        feature = "Progress analytics",
+                        freeValue = "\u2713",
+                        plusValue = "\u2713"
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4EA)),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, Color(0xFFFFD8C0), RoundedCornerShape(16.dp))
-            ) {
-                Text(
-                    text = "Your first deck is ready. One session a day is all it takes to start reading Japanese with confidence.",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF5A3A2A)
-                )
-            }
             Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = onCompleteFree,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFFFF5A00),
-                    contentColor = Color.White
-                ),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(
-                    "Start Learning",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+
+            // Inline paywall: same plan options and CTA as PaywallScreen; user can subscribe or skip here
+            InlinePaywallContent(
+                billingManager = billingManager,
+                preferTrial = true,
+                onContinueFree = onCompleteFree,
+                onActivated = onActivated
+            )
         }
+
+        // X at top right (drawn last so it stays on top for paywall compliance)
+        IconButton(
+            onClick = onCompleteFree,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(8.dp)
+                .background(Color.White.copy(alpha = 0.9f), CircleShape)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = "Close",
+                tint = Color(0xFF2D1E14)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlanFeatureRow(feature: String, freeValue: String, plusValue: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = feature,
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF4D392D),
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = freeValue,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF7A6355),
+            modifier = Modifier.width(60.dp),
+            textAlign = TextAlign.Center
+        )
+        Text(
+            text = plusValue,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFFFF5A00),
+            modifier = Modifier.width(72.dp),
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -880,7 +927,7 @@ private fun slidesForGoal(goal: EducationalGoal): List<OnboardingSlide> {
             ),
             OnboardingSlide(
                 title = "Snap It, Learn It",
-                body = "Spotted something at a konbini or izakaya you can\u2019t read? Tap the camera icon, take a photo \u2014 Kitsune reads the Japanese and adds it to tomorrow\u2019s deck. No dictionary detour.",
+                body = "Spotted something at a konbini or izakaya you can\u2019t read? Tap the camera icon, take a photo \u2014 Kitsune reads the Japanese for you and adds it to your learning plan. No dictionary detour.",
                 watermark = "\u64ae",
                 icon = Icons.Outlined.CameraAlt,
                 decoration = SlideDecoration.LANTERN

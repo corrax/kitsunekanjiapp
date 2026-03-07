@@ -215,27 +215,49 @@ fun LearnScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             if (fabExpanded) {
-                FloatingActionButton(
-                    onClick = { fabExpanded = false; onOpenCapture() },
-                    containerColor = Color.White,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
-                    modifier = Modifier
-                        .size(48.dp)
-                        .border(1.dp, BorderLight, CircleShape)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Filled.CameraAlt, "Capture Japanese", tint = AccentOrange)
+                    Text(
+                        text = "Capture Text",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextDark,
+                        fontWeight = FontWeight.Medium
+                    )
+                    FloatingActionButton(
+                        onClick = { fabExpanded = false; onOpenCapture() },
+                        containerColor = Color.White,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
+                        modifier = Modifier
+                            .size(48.dp)
+                            .border(1.dp, BorderLight, CircleShape)
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, "Capture Japanese", tint = AccentOrange)
+                    }
                 }
-                FloatingActionButton(
-                    onClick = { fabExpanded = false; onOpenCaptureHistory() },
-                    containerColor = Color.White,
-                    shape = CircleShape,
-                    elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
-                    modifier = Modifier
-                        .size(48.dp)
-                        .border(1.dp, BorderLight, CircleShape)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Filled.CollectionsBookmark, "Review saved cards", tint = AccentOrange)
+                    Text(
+                        text = "Saved Words",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = TextDark,
+                        fontWeight = FontWeight.Medium
+                    )
+                    FloatingActionButton(
+                        onClick = { fabExpanded = false; onOpenCaptureHistory() },
+                        containerColor = Color.White,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
+                        modifier = Modifier
+                            .size(48.dp)
+                            .border(1.dp, BorderLight, CircleShape)
+                    ) {
+                        Icon(Icons.Filled.CollectionsBookmark, "Review saved cards", tint = AccentOrange)
+                    }
                 }
             }
             FloatingActionButton(

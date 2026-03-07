@@ -39,7 +39,7 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.WritingTemplateEn
         CapturedTermEntity::class,
         CapturedCardEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

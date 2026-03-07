@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.BuildConfig
+import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CaptureStatus
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedCardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedMediaEntity
@@ -18,6 +20,7 @@ import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -44,7 +47,8 @@ private data class BackendTerm(
     val kanji: String,
     val reading: String = "",
     val meaning: String = "",
-    val notes: String = ""
+    val notes: String = "",
+    val jlptLevel: String = "unknown"
 )
 
 @Serializable
@@ -56,6 +60,7 @@ data class RecognizedTerm(
     val text: String,
     val reading: String,
     val meaning: String,
+    val jlptLevel: String = "unknown",
     val confidence: Float,
     val selected: Boolean = true
 )
@@ -65,6 +70,7 @@ data class CaptureHistoryItem(
     val kanji: String,
     val kana: String,
     val meaning: String,
+    val jlptLevel: String,
     val includeInDaily: Boolean
 )
 
@@ -74,16 +80,23 @@ data class CaptureUiState(
     val capturedHistory: List<CaptureHistoryItem> = emptyList(),
     val isProcessing: Boolean = false,
     val savedCount: Int = 0,
-    val errorMessage: String? = null
-)
+    val errorMessage: String? = null,
+    val capturesUsedThisWeek: Int = 0,
+    val isPlusEntitled: Boolean = false
+) {
+    val isQuotaExceeded: Boolean
+        get() = !isPlusEntitled && capturesUsedThisWeek >= CaptureQuotaPreferences.FREE_WEEKLY_LIMIT
+}
 
-enum class CapturePhase { CAMERA, REVIEW, SAVED, HISTORY }
+enum class CapturePhase { CAMERA, PROCESSING, REVIEW, SAVED, HISTORY }
 
 // ── ViewModel ────────────────────────────────────────────────────────────────
 
 class CaptureViewModel(
     private val repository: KitsuneRepository,
     private val cacheDir: File,
+    private val billingPreferences: BillingPreferences,
+    private val captureQuotaPreferences: CaptureQuotaPreferences,
     startInHistory: Boolean = false
 ) : ViewModel() {
 
@@ -92,8 +105,25 @@ class CaptureViewModel(
 
     private val json = Json { ignoreUnknownKeys = true }
     private var lastMediaId: String? = null
+    private var cachedPurchaseToken: String? = null
 
     init {
+        viewModelScope.launch {
+            combine(
+                billingPreferences.entitlementFlow,
+                captureQuotaPreferences.weeklyUsedFlow
+            ) { entitlement, used ->
+                entitlement to used
+            }.collect { (entitlement, used) ->
+                cachedPurchaseToken = entitlement.lastPurchaseToken
+                _uiState.update {
+                    it.copy(
+                        isPlusEntitled = entitlement.isPlusEntitled,
+                        capturesUsedThisWeek = used
+                    )
+                }
+            }
+        }
         if (startInHistory) {
             _uiState.update { it.copy(phase = CapturePhase.HISTORY) }
             loadHistory()
@@ -103,16 +133,25 @@ class CaptureViewModel(
     // ── Capture flow ─────────────────────────────────────────────────────────
 
     fun processImage(bitmap: Bitmap) {
-        _uiState.update { it.copy(isProcessing = true, errorMessage = null) }
+        if (_uiState.value.isQuotaExceeded) return
+        _uiState.update { it.copy(isProcessing = true, phase = CapturePhase.PROCESSING, errorMessage = null) }
         viewModelScope.launch {
             try {
                 val terms = analyzeWithBackend(bitmap)
                 if (terms.isEmpty()) {
                     _uiState.update {
-                        it.copy(isProcessing = false, errorMessage = "No Japanese text found in this image.")
+                        it.copy(isProcessing = false, phase = CapturePhase.CAMERA, errorMessage = "No Japanese text found in this image.")
                     }
                     return@launch
                 }
+
+                // Count against free-tier quota only when not Plus (Plus = unlimited)
+                val newCount = if (_uiState.value.isPlusEntitled) {
+                    _uiState.value.capturesUsedThisWeek
+                } else {
+                    captureQuotaPreferences.incrementWeeklyUsed()
+                }
+                _uiState.update { it.copy(capturesUsedThisWeek = newCount) }
 
                 val mediaId = UUID.randomUUID().toString()
                 lastMediaId = mediaId
@@ -135,8 +174,17 @@ class CaptureViewModel(
                     it.copy(phase = CapturePhase.REVIEW, recognizedTerms = terms, isProcessing = false)
                 }
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(isProcessing = false, errorMessage = friendlyErrorMessageFor(e))
+                val msg = friendlyErrorMessageFor(e)
+                if (msg == "QUOTA_EXCEEDED") {
+                    _uiState.update {
+                        it.copy(
+                            isProcessing = false,
+                            phase = CapturePhase.CAMERA,
+                            capturesUsedThisWeek = CaptureQuotaPreferences.FREE_WEEKLY_LIMIT
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isProcessing = false, errorMessage = msg, phase = CapturePhase.CAMERA) }
                 }
             }
         }
@@ -161,6 +209,10 @@ class CaptureViewModel(
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json")
+            val token = cachedPurchaseToken
+            if (!token.isNullOrBlank()) {
+                connection.setRequestProperty("x-purchase-token", token)
+            }
             connection.doOutput = true
             connection.connectTimeout = 30_000
             connection.readTimeout = 30_000
@@ -181,6 +233,7 @@ class CaptureViewModel(
                     text = term.kanji,
                     reading = term.reading,
                     meaning = term.meaning.ifBlank { "—" },
+                    jlptLevel = term.jlptLevel.ifBlank { "unknown" },
                     confidence = 1.0f,
                     selected = true
                 )
@@ -203,6 +256,8 @@ class CaptureViewModel(
                 "Could not read this image clearly. Point at Japanese text or labeled objects and try again."
             code == HttpURLConnection.HTTP_UNAVAILABLE ->
                 "Capture service is temporarily unavailable. Please try again."
+            code == 402 ->
+                "QUOTA_EXCEEDED"
             code == 429 ->
                 "Too many capture requests. Please wait a moment and try again."
             else -> "Backend returned $code"
@@ -235,7 +290,8 @@ class CaptureViewModel(
                     meaning = term.meaning,
                     cropRect = null,
                     confidence = term.confidence,
-                    source = "llm"
+                    source = "llm",
+                    jlptLevel = term.jlptLevel
                 )
             }
             repository.saveCapturedTerms(terms)
@@ -292,6 +348,7 @@ class CaptureViewModel(
                             kanji = row.kanji,
                             kana = row.kana ?: "",
                             meaning = row.meaning ?: "—",
+                            jlptLevel = row.jlptLevel,
                             includeInDaily = row.includeInDaily
                         )
                     }
@@ -338,9 +395,19 @@ class CaptureViewModel(
         fun factory(
             repository: KitsuneRepository,
             cacheDir: File,
+            billingPreferences: BillingPreferences,
+            captureQuotaPreferences: CaptureQuotaPreferences,
             startInHistory: Boolean = false
         ): ViewModelProvider.Factory = viewModelFactory {
-            initializer { CaptureViewModel(repository, cacheDir, startInHistory) }
+            initializer {
+                CaptureViewModel(
+                    repository = repository,
+                    cacheDir = cacheDir,
+                    billingPreferences = billingPreferences,
+                    captureQuotaPreferences = captureQuotaPreferences,
+                    startInHistory = startInHistory
+                )
+            }
         }
     }
 }

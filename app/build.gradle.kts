@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
+    // Google Play Billing for Plus subscriptions and optional Remove Ads IAP (when ENABLE_ADS is true)
     implementation(libs.google.billing.ktx)
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")

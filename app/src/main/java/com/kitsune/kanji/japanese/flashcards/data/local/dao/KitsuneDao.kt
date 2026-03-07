@@ -504,7 +504,7 @@ interface KitsuneDao {
     @Query(
         """
         SELECT cc.cardId, ct.termId, ct.kanji, ct.kana, ct.meaning,
-               cc.includeInDaily, cc.createdAtEpochMillis
+               cc.includeInDaily, cc.createdAtEpochMillis, ct.jlptLevel
         FROM captured_cards cc
         INNER JOIN captured_terms ct ON cc.termId = ct.termId
         ORDER BY cc.createdAtEpochMillis DESC
@@ -537,7 +537,8 @@ data class CapturedHistoryRow(
     val kana: String?,
     val meaning: String?,
     val includeInDaily: Boolean,
-    val createdAtEpochMillis: Long
+    val createdAtEpochMillis: Long,
+    val jlptLevel: String = "unknown"
 )
 
 data class DifficultyScoreSnapshotRow(

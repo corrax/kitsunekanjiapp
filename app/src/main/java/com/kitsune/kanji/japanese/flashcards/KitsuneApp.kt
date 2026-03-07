@@ -6,6 +6,7 @@ import com.kitsune.kanji.japanese.flashcards.data.billing.BillingManager
 import com.kitsune.kanji.japanese.flashcards.BuildConfig
 import com.kitsune.kanji.japanese.flashcards.data.ads.AdManager
 import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DailySchedulePreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.KitsuneDatabase
@@ -51,6 +52,7 @@ class AppContainer(application: Application) {
     )
 
     val handwritingScorer: HandwritingScorer = MlKitHandwritingScorer()
+    val captureQuotaPreferences: CaptureQuotaPreferences = CaptureQuotaPreferences(application)
     val billingPreferences: BillingPreferences = BillingPreferences(application)
     val billingManager: BillingManager = BillingManager(
         context = application,

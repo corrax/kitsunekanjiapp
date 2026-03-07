@@ -1325,14 +1325,19 @@ class KitsuneRepositoryImpl(
             0
         }
 
-        val rating = (
-            900f +
-                (ability.abilityLevel * 72f) +
-                (ability.rollingScore * 2.2f) +
-                (coverageRatio * 240f) +
-                (hardDelta * 4.5f)
+        val rating = if (coveredWords == 0) {
+            // Fresh install / no progress: start at level 1 (rating 800)
+            800
+        } else {
+            (
+                900f +
+                    (ability.abilityLevel * 72f) +
+                    (ability.rollingScore * 2.2f) +
+                    (coverageRatio * 240f) +
+                    (hardDelta * 4.5f)
             ).roundToInt()
-            .coerceIn(800, 2600)
+                .coerceIn(800, 2600)
+        }
 
         val level = ((rating - 800) / 80 + 1).coerceIn(1, 30)
         return UserRankSummary(

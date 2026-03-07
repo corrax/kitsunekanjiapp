@@ -30,7 +30,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -56,6 +59,8 @@ import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingScreen
 import com.kitsune.kanji.japanese.flashcards.ui.onboarding.OnboardingSelection
 import com.kitsune.kanji.japanese.flashcards.ui.profile.ProfileTabScreen
 import com.kitsune.kanji.japanese.flashcards.ui.profile.ProfileTabViewModel
+import com.kitsune.kanji.japanese.flashcards.ui.history.HistoryScreen
+import com.kitsune.kanji.japanese.flashcards.ui.history.HistoryViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportScreen
 import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.settings.SettingsTabScreen
@@ -75,6 +80,7 @@ private const val routeDeck = "deck"
 private const val routeDeckReport = "deck_report"
 private const val routeCapture = "capture"
 private const val routeCaptureHistory = "capture_history"
+private const val routeHistory = "history"
 
 private data class TabItem(
     val route: String,
@@ -162,6 +168,12 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                 }
             }
         ) { innerPadding ->
+            val lifecycleOwner = LocalLifecycleOwner.current
+            LaunchedEffect(lifecycleOwner) {
+                lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                    appContainer.billingManager.refreshPurchases()
+                }
+            }
             NavHost(
                 navController = navController,
                 startDestination = checkNotNull(startDestination),
@@ -169,6 +181,7 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
             ) {
                 composable(routeOnboarding) {
                     OnboardingScreen(
+                        billingManager = appContainer.billingManager,
                         onCompleteFree = { selection ->
                             scope.launch {
                                 persistOnboardingSelection(appContainer, selection)
@@ -179,49 +192,60 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                                 }
                             }
                         },
-                        onStartTrial = { selection ->
+                        onActivated = { selection ->
                             scope.launch {
                                 persistOnboardingSelection(appContainer, selection)
-                                navController.navigate("$routePaywall?trial=true")
-                            }
-                        },
-                        onChoosePlan = { selection ->
-                            scope.launch {
-                                persistOnboardingSelection(appContainer, selection)
-                                navController.navigate("$routePaywall?trial=false")
-                            }
-                        }
-                    )
-                }
-
-                composable(
-                    route = "$routePaywall?trial={trial}",
-                    arguments = listOf(
-                        navArgument("trial") {
-                            type = NavType.BoolType
-                            defaultValue = false
-                        }
-                    )
-                ) {
-                    val preferTrial = it.arguments?.getBoolean("trial") ?: false
-                    PaywallScreen(
-                        billingManager = appContainer.billingManager,
-                        preferTrial = preferTrial,
-                        onContinueFree = {
-                            scope.launch {
                                 appContainer.onboardingPreferences.setOnboardingCompleted()
                                 navController.navigate(routeLearn) {
                                     popUpTo(routeOnboarding) { inclusive = true }
                                     launchSingleTop = true
                                 }
                             }
+                        }
+                    )
+                }
+
+                composable(
+                    route = "$routePaywall?trial={trial}&fromOnboarding={fromOnboarding}",
+                    arguments = listOf(
+                        navArgument("trial") {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
+                        navArgument("fromOnboarding") {
+                            type = NavType.BoolType
+                            defaultValue = true
+                        }
+                    )
+                ) {
+                    val preferTrial = it.arguments?.getBoolean("trial") ?: false
+                    val fromOnboarding = it.arguments?.getBoolean("fromOnboarding") ?: true
+                    PaywallScreen(
+                        billingManager = appContainer.billingManager,
+                        preferTrial = preferTrial,
+                        onContinueFree = {
+                            scope.launch {
+                                if (fromOnboarding) {
+                                    appContainer.onboardingPreferences.setOnboardingCompleted()
+                                    navController.navigate(routeLearn) {
+                                        popUpTo(routeOnboarding) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                } else {
+                                    navController.popBackStack()
+                                }
+                            }
                         },
                         onActivated = {
                             scope.launch {
-                                appContainer.onboardingPreferences.setOnboardingCompleted()
-                                navController.navigate(routeLearn) {
-                                    popUpTo(routeOnboarding) { inclusive = true }
-                                    launchSingleTop = true
+                                if (fromOnboarding) {
+                                    appContainer.onboardingPreferences.setOnboardingCompleted()
+                                    navController.navigate(routeLearn) {
+                                        popUpTo(routeOnboarding) { inclusive = true }
+                                        launchSingleTop = true
+                                    }
+                                } else {
+                                    navController.popBackStack()
                                 }
                             }
                         }
@@ -310,7 +334,9 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                     val viewModel: ProfileTabViewModel = viewModel(
                         factory = ProfileTabViewModel.factory(
                             repository = appContainer.repository,
-                            deckSelectionPreferences = appContainer.deckSelectionPreferences
+                            deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                            billingPreferences = appContainer.billingPreferences,
+                            captureQuotaPreferences = appContainer.captureQuotaPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -319,7 +345,8 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         onOpenRunReport = { runId ->
                             navController.navigate("$routeDeckReport/$runId")
                         },
-                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") },
+                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false&fromOnboarding=false") },
+                        onOpenHistory = { navController.navigate(routeHistory) },
                         onPageChanged = viewModel::onPageChanged
                     )
                 }
@@ -330,7 +357,8 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         factory = SettingsTabViewModel.factory(
                             dailySchedulePreferences = appContainer.dailySchedulePreferences,
                             onboardingPreferences = appContainer.onboardingPreferences,
-                            deckSelectionPreferences = appContainer.deckSelectionPreferences
+                            deckSelectionPreferences = appContainer.deckSelectionPreferences,
+                            billingPreferences = appContainer.billingPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -349,7 +377,7 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                                 DailyChallengeNotificationScheduler.schedule(context)
                             }
                         },
-                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
+                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false&fromOnboarding=false") }
                     )
                 }
 
@@ -358,7 +386,9 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                     val viewModel: CaptureViewModel = viewModel(
                         factory = CaptureViewModel.factory(
                             repository = appContainer.repository,
-                            cacheDir = context.cacheDir
+                            cacheDir = context.cacheDir,
+                            billingPreferences = appContainer.billingPreferences,
+                            captureQuotaPreferences = appContainer.captureQuotaPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -368,6 +398,7 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         onToggleTerm = viewModel::toggleTerm,
                         onSaveSelected = viewModel::saveSelectedTerms,
                         onReset = viewModel::resetToCamera,
+                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false&fromOnboarding=false") },
                         onBack = { navController.popBackStack() }
                     )
                 }
@@ -378,6 +409,8 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         factory = CaptureViewModel.factory(
                             repository = appContainer.repository,
                             cacheDir = context.cacheDir,
+                            billingPreferences = appContainer.billingPreferences,
+                            captureQuotaPreferences = appContainer.captureQuotaPreferences,
                             startInHistory = true
                         )
                     )
@@ -390,7 +423,31 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         onReset = viewModel::resetToCamera,
                         onToggleCardInDaily = viewModel::toggleCardInDaily,
                         onDeleteCard = viewModel::deleteCard,
+                        onOpenUpgrade = { navController.navigate("$routePaywall?trial=false&fromOnboarding=false") },
                         onBack = { navController.popBackStack() }
+                    )
+                }
+
+                // --- Pushed: Study History ---
+                composable(routeHistory) {
+                    val viewModel: HistoryViewModel = viewModel(
+                        factory = HistoryViewModel.factory(repository = appContainer.repository)
+                    )
+                    LaunchedEffect(Unit) { viewModel.load() }
+                    LaunchedEffect(Unit) {
+                        viewModel.openDeckEvents.collect { deckRunId ->
+                            navController.navigate("$routeDeck/$deckRunId")
+                        }
+                    }
+                    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                    HistoryScreen(
+                        state = state,
+                        onBack = { navController.popBackStack() },
+                        onSelectTab = viewModel::selectTab,
+                        onOpenRunReport = { runId ->
+                            navController.navigate("$routeDeckReport/$runId")
+                        },
+                        onRetest = viewModel::startRetest
                     )
                 }
 

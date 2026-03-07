@@ -61,100 +61,107 @@ fun HistoryScreen(
         return
     }
 
-    LazyColumn(
+    val isEmpty = when (state.selectedTab) {
+        HistoryTab.CARDS -> state.attempts.isEmpty()
+        HistoryTab.REPORTS -> state.reports.isEmpty()
+    }
+
+    Column(
         modifier = Modifier
-            .fillMaxSize()
+            .then(
+                if (isEmpty) Modifier.fillMaxWidth()
+                else Modifier.fillMaxSize()
+            )
             .statusBarsPadding()
             .navigationBarsPadding()
             .background(Color(0xFFF7F4EF))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back"
-                    )
-                }
-                Text(
-                    text = "Study History",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back"
                 )
             }
+            Text(
+                text = "Study History",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
         }
 
         if (state.errorMessage != null) {
-            item {
-                Text(
-                    text = state.errorMessage,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
+            Text(
+                text = state.errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
 
-        item {
-            TabRow(selectedTabIndex = state.selectedTab.ordinal) {
-                HistoryTab.entries.forEach { tab ->
-                    Tab(
-                        selected = tab == state.selectedTab,
-                        onClick = { onSelectTab(tab) },
-                        text = {
-                            Text(
-                                if (tab == HistoryTab.CARDS) {
-                                    "Cards"
-                                } else {
-                                    "Reports"
-                                }
-                            )
-                        }
-                    )
-                }
+        TabRow(selectedTabIndex = state.selectedTab.ordinal) {
+            HistoryTab.entries.forEach { tab ->
+                Tab(
+                    selected = tab == state.selectedTab,
+                    onClick = { onSelectTab(tab) },
+                    text = {
+                        Text(
+                            if (tab == HistoryTab.CARDS) {
+                                "Cards"
+                            } else {
+                                "Reports"
+                            }
+                        )
+                    }
+                )
             }
         }
 
         when (state.selectedTab) {
             HistoryTab.CARDS -> {
                 if (state.attempts.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No kanji attempts yet. Start a deck to build your history.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF6C6258)
-                        )
-                    }
+                    Text(
+                        text = "No kanji attempts yet. Start a deck to build your history.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6C6258)
+                    )
                 } else {
-                    items(state.attempts, key = { it.attemptId }) { attempt ->
-                        HistoryCard(
-                            item = attempt,
-                            isRetesting = state.retestAttemptIdInProgress == attempt.attemptId,
-                            onOpenRunReport = { onOpenRunReport(attempt.deckRunId) },
-                            onRetest = { onRetest(attempt.attemptId) }
-                        )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(state.attempts, key = { it.attemptId }) { attempt ->
+                            HistoryCard(
+                                item = attempt,
+                                isRetesting = state.retestAttemptIdInProgress == attempt.attemptId,
+                                onOpenRunReport = { onOpenRunReport(attempt.deckRunId) },
+                                onRetest = { onRetest(attempt.attemptId) }
+                            )
+                        }
                     }
                 }
             }
             HistoryTab.REPORTS -> {
                 if (state.reports.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No submitted deck reports yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color(0xFF6C6258)
-                        )
-                    }
+                    Text(
+                        text = "No submitted deck reports yet.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6C6258)
+                    )
                 } else {
-                    items(state.reports, key = { it.deckRunId }) { report ->
-                        ReportHistoryCard(
-                            report = report,
-                            onOpenRunReport = { onOpenRunReport(report.deckRunId) }
-                        )
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(state.reports, key = { it.deckRunId }) { report ->
+                            ReportHistoryCard(
+                                report = report,
+                                onOpenRunReport = { onOpenRunReport(report.deckRunId) }
+                            )
+                        }
                     }
                 }
             }

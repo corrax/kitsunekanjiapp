@@ -27,12 +27,17 @@ import kotlinx.coroutines.launch
 
 data class BillingProduct(
     val productId: String,
+    val basePlanId: String,
     val title: String,
     val description: String,
     val formattedPrice: String,
     val billingPeriodLabel: String?,
     val hasFreeTrial: Boolean,
-    val offerToken: String
+    val offerToken: String,
+    /** Price in micros (e.g. from PricingPhase.priceAmountMicros) for discount calculation; 0 for non-subs. */
+    val priceAmountMicros: Long = 0L,
+    /** ISO 4217 currency code (e.g. USD, CAD, SGD) for unambiguous display. */
+    val priceCurrencyCode: String = ""
 )
 
 data class BillingUiState(
@@ -55,8 +60,6 @@ class BillingManager(
 ) : PurchasesUpdatedListener {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val cachedProductDetails = mutableMapOf<String, ProductDetails>()
-    private val cachedOfferTokenByProductId = mutableMapOf<String, String>()
-    private val cachedTrialOfferTokenByProductId = mutableMapOf<String, String>()
 
     private val _uiState = MutableStateFlow(BillingUiState())
     val uiState: StateFlow<BillingUiState> = _uiState.asStateFlow()
@@ -141,41 +144,41 @@ class BillingManager(
             }
 
             cachedProductDetails.clear()
-            cachedOfferTokenByProductId.clear()
-            cachedTrialOfferTokenByProductId.clear()
             val mapped = mutableListOf<BillingProduct>()
             for (details in productDetails) {
                 val offers = details.subscriptionOfferDetails.orEmpty()
                 if (offers.isEmpty()) continue
 
-                val trialOffer = offers.firstOrNull { offer ->
-                    offer.pricingPhases.pricingPhaseList.any { phase ->
-                        phase.priceAmountMicros == 0L
-                    }
-                }
-                val baseOffer = offers.firstOrNull()
-                val selectedOffer = trialOffer ?: baseOffer ?: continue
-                val pricingPhase = selectedOffer.pricingPhases.pricingPhaseList.lastOrNull() ?: continue
-
                 cachedProductDetails[details.productId] = details
-                cachedOfferTokenByProductId[details.productId] = selectedOffer.offerToken
-                if (trialOffer != null) {
-                    cachedTrialOfferTokenByProductId[details.productId] = trialOffer.offerToken
-                }
 
-                mapped += BillingProduct(
-                    productId = details.productId,
-                    title = details.name,
-                    description = details.description,
-                    formattedPrice = pricingPhase.formattedPrice,
-                    billingPeriodLabel = pricingPhase.billingPeriod,
-                    hasFreeTrial = trialOffer != null,
-                    offerToken = selectedOffer.offerToken
-                )
+                // Group by base plan (plus-weekly, plus-monthly, plus-yearly); prefer trial offer per plan.
+                val byBasePlan = offers.groupBy { it.basePlanId }
+                for ((basePlanId, planOffers) in byBasePlan) {
+                    val trialOffer = planOffers.firstOrNull { offer ->
+                        offer.pricingPhases.pricingPhaseList.any { phase ->
+                            phase.priceAmountMicros == 0L
+                        }
+                    }
+                    val selectedOffer = trialOffer ?: planOffers.firstOrNull() ?: continue
+                    val pricingPhase = selectedOffer.pricingPhases.pricingPhaseList.lastOrNull() ?: continue
+
+                    mapped += BillingProduct(
+                        productId = details.productId,
+                        basePlanId = basePlanId,
+                        title = details.name,
+                        description = details.description,
+                        formattedPrice = pricingPhase.formattedPrice,
+                        billingPeriodLabel = pricingPhase.billingPeriod,
+                        hasFreeTrial = trialOffer != null,
+                        offerToken = selectedOffer.offerToken,
+                        priceAmountMicros = pricingPhase.priceAmountMicros,
+                        priceCurrencyCode = pricingPhase.priceCurrencyCode
+                    )
+                }
             }
 
             _uiState.value = _uiState.value.copy(
-                products = mapped.sortedBy { planSortKey(it.productId) },
+                products = mapped.sortedBy { planSortKey(it.basePlanId) },
                 message = null
             )
             queryRemoveAdsProduct()
@@ -204,12 +207,15 @@ class BillingManager(
             _uiState.value = _uiState.value.copy(
                 removeAdsProduct = BillingProduct(
                     productId = details.productId,
+                    basePlanId = "",
                     title = details.name,
                     description = details.description,
                     formattedPrice = oneTimeOffer?.formattedPrice ?: "",
                     billingPeriodLabel = null,
                     hasFreeTrial = false,
-                    offerToken = ""
+                    offerToken = "",
+                    priceAmountMicros = 0L,
+                    priceCurrencyCode = oneTimeOffer?.priceCurrencyCode ?: ""
                 )
             )
         }
@@ -238,7 +244,7 @@ class BillingManager(
         }
     }
 
-    fun launchPurchase(activity: Activity, productId: String, preferTrialOffer: Boolean) {
+    fun launchPurchase(activity: Activity, productId: String, offerToken: String) {
         if (!billingClient.isReady) {
             connect()
             _uiState.value = _uiState.value.copy(message = "Connecting to billing, please try again.")
@@ -250,13 +256,7 @@ class BillingManager(
             _uiState.value = _uiState.value.copy(message = "Plan is not available right now.")
             return
         }
-
-        val offerToken = if (preferTrialOffer) {
-            cachedTrialOfferTokenByProductId[productId] ?: cachedOfferTokenByProductId[productId]
-        } else {
-            cachedOfferTokenByProductId[productId]
-        }
-        if (offerToken == null) {
+        if (offerToken.isBlank()) {
             _uiState.value = _uiState.value.copy(message = "Offer token is missing for this plan.")
             return
         }
@@ -289,10 +289,11 @@ class BillingManager(
                 return@queryPurchasesAsync
             }
             scope.launch {
-                if (purchases.isEmpty()) {
+                val plusPurchases = purchases.filter { it.products.contains(PRODUCT_PLUS) }
+                if (plusPurchases.isEmpty()) {
                     billingPreferences.clearEntitlement()
                 } else {
-                    purchases.forEach { processPurchase(it) }
+                    plusPurchases.forEach { processPurchase(it) }
                 }
             }
         }
@@ -343,7 +344,7 @@ class BillingManager(
             billingClient.acknowledgePurchase(params) {}
         }
 
-        val activeProduct = purchase.products.firstOrNull() ?: PLAN_PRODUCT_IDS.first()
+        val activeProduct = purchase.products.firstOrNull() ?: PRODUCT_PLUS
         billingPreferences.setPlusEntitlement(
             planId = activeProduct,
             purchaseToken = purchase.purchaseToken
@@ -364,26 +365,18 @@ class BillingManager(
     }
 
     companion object {
+        // Product IDs must match the in-app products / subscriptions created in Google Play Console.
         const val PRODUCT_REMOVE_ADS = "kitsune_remove_ads"
-        const val PRODUCT_PLUS_WEEKLY = "kitsune_plus_weekly"
-        const val PRODUCT_PLUS_MONTHLY = "kitsune_plus_monthly"
-        const val PRODUCT_PLUS_ANNUAL = "kitsune_plus_annual"
-
-        val PLAN_PRODUCT_IDS = emptyList<String>()
-        /*
-        val PLAN_PRODUCT_IDS = listOf(
-            PRODUCT_PLUS_WEEKLY,
-            PRODUCT_PLUS_MONTHLY,
-            PRODUCT_PLUS_ANNUAL
-        )
-        */
+        // Single Plus subscription product with base plans: plus-weekly, plus-monthly, plus-yearly (offer weekly-trial for trial)
+        const val PRODUCT_PLUS = "plus_v1"
+        val PLAN_PRODUCT_IDS = listOf(PRODUCT_PLUS)
     }
 
-    private fun planSortKey(productId: String): Int {
+    private fun planSortKey(basePlanId: String): Int {
         return when {
-            productId.contains("weekly", ignoreCase = true) -> 0
-            productId.contains("monthly", ignoreCase = true) -> 1
-            productId.contains("annual", ignoreCase = true) -> 2
+            basePlanId.contains("weekly", ignoreCase = true) -> 0
+            basePlanId.contains("monthly", ignoreCase = true) -> 1
+            basePlanId.contains("yearly", ignoreCase = true) -> 2
             else -> 9
         }
     }

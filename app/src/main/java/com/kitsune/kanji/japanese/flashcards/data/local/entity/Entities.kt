@@ -181,7 +181,8 @@ data class CapturedTermEntity(
     val meaning: String,
     val cropRect: String?,
     val confidence: Float,
-    val source: String
+    val source: String,
+    val jlptLevel: String = "unknown"
 )
 
 @Entity(tableName = "captured_cards")

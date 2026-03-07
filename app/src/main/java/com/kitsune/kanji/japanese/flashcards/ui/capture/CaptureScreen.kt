@@ -18,6 +18,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -71,11 +74,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.nio.ByteBuffer
+import kotlinx.coroutines.delay
 
 private val AccentOrange = Color(0xFFFF5A00)
 private val TextDark = Color(0xFF2D1E14)
@@ -91,15 +96,28 @@ fun CaptureScreen(
     onReset: () -> Unit,
     onToggleCardInDaily: (String, Boolean) -> Unit = { _, _ -> },
     onDeleteCard: (String) -> Unit = {},
+    onOpenUpgrade: () -> Unit = {},
     onBack: () -> Unit
 ) {
     when (state.phase) {
-        CapturePhase.CAMERA -> CameraPhase(
-            isProcessing = state.isProcessing,
-            errorMessage = state.errorMessage,
-            onCapture = onCapture,
-            onBack = onBack
-        )
+        CapturePhase.CAMERA -> {
+            if (state.isQuotaExceeded) {
+                QuotaExceededScreen(
+                    capturesUsed = state.capturesUsedThisWeek,
+                    weeklyLimit = CaptureQuotaPreferences.FREE_WEEKLY_LIMIT,
+                    onUpgrade = onOpenUpgrade,
+                    onBack = onBack
+                )
+            } else {
+                CameraPhase(
+                    errorMessage = state.errorMessage,
+                    onCapture = onCapture,
+                    onBack = onBack
+                )
+            }
+        }
+
+        CapturePhase.PROCESSING -> ProcessingPhase()
 
         CapturePhase.REVIEW -> ReviewPhase(
             terms = state.recognizedTerms,
@@ -125,7 +143,6 @@ fun CaptureScreen(
 
 @Composable
 private fun CameraPhase(
-    isProcessing: Boolean,
     errorMessage: String?,
     onCapture: (Bitmap) -> Unit,
     onBack: () -> Unit
@@ -267,72 +284,122 @@ private fun CameraPhase(
         // Error message
         val displayMessage = localWarning ?: errorMessage
         if (displayMessage != null) {
-            Text(
-                text = displayMessage,
-                color = Color.White,
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center,
+            Column(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(32.dp)
                     .clip(RoundedCornerShape(12.dp))
                     .background(Color(0xCCCC0000))
-                    .padding(16.dp)
-            )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = displayMessage,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Tap the shutter to try again",
+                    color = Color.White.copy(alpha = 0.70f),
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
 
-        // Shutter button or spinner
+        // Shutter button
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 48.dp)
         ) {
-            if (isProcessing) {
-                CircularProgressIndicator(
-                    color = Color.White,
-                    modifier = Modifier.size(64.dp)
-                )
-            } else {
-                IconButton(
-                    onClick = {
-                        if (!hasCameraPermission) {
-                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            return@IconButton
-                        }
-                        if (!isNetworkConnected) {
-                            localWarning = "You're offline. Connect to the internet before capturing."
-                            return@IconButton
-                        }
-                        imageCapture.takePicture(
-                            ContextCompat.getMainExecutor(context),
-                            object : ImageCapture.OnImageCapturedCallback() {
-                                override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                                    val bitmap = imageProxyToBitmap(imageProxy)
-                                    imageProxy.close()
-                                    if (bitmap != null) {
-                                        onCapture(bitmap)
-                                    }
-                                }
-
-                                override fun onError(exception: ImageCaptureException) {
-                                    // Error handled by ViewModel
+            IconButton(
+                onClick = {
+                    if (!hasCameraPermission) {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        return@IconButton
+                    }
+                    if (!isNetworkConnected) {
+                        localWarning = "You're offline. Connect to the internet before capturing."
+                        return@IconButton
+                    }
+                    imageCapture.takePicture(
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageCapturedCallback() {
+                            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                                val bitmap = imageProxyToBitmap(imageProxy)
+                                imageProxy.close()
+                                if (bitmap != null) {
+                                    onCapture(bitmap)
                                 }
                             }
-                        )
-                    },
-                    modifier = Modifier
-                        .size(72.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                ) {
-                    Icon(
-                        Icons.Filled.CameraAlt,
-                        contentDescription = "Capture",
-                        tint = TextDark,
-                        modifier = Modifier.size(32.dp)
+
+                            override fun onError(exception: ImageCaptureException) {
+                                // Error handled by ViewModel
+                            }
+                        }
                     )
-                }
+                },
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+            ) {
+                Icon(
+                    Icons.Filled.CameraAlt,
+                    contentDescription = "Capture",
+                    tint = TextDark,
+                    modifier = Modifier.size(32.dp)
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun ProcessingPhase() {
+    var label by remember { mutableStateOf("Sending photo…") }
+    LaunchedEffect(Unit) {
+        val steps = listOf(
+            "Sending photo…",
+            "Identifying Japanese text…",
+            "Looking up vocabulary…",
+            "Almost done…"
+        )
+        var i = 0
+        while (true) {
+            label = steps[i % steps.size]
+            i++
+            delay(2500L)
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WarmBg),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(
+                color = AccentOrange,
+                modifier = Modifier.size(56.dp)
+            )
+            Text(
+                text = label,
+                color = TextDark,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "This may take a few seconds... please keep the app running",
+                color = TextMuted,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
@@ -639,7 +706,7 @@ private fun HistoryPhase(
             }
         } else {
             Text(
-                text = "Toggle \"In daily\" to include a card in your daily challenge",
+                text = "Toggle words to include them in your daily challenge",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextMuted,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
@@ -654,13 +721,21 @@ private fun HistoryPhase(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = item.kanji,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextDark,
-                                    fontSize = 24.sp
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = item.kanji,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextDark,
+                                        fontSize = 24.sp
+                                    )
+                                    if (item.jlptLevel != "unknown") {
+                                        JlptBadge(level = item.jlptLevel)
+                                    }
+                                }
                                 if (item.kana.isNotBlank()) {
                                     Text(
                                         text = item.kana,
@@ -701,6 +776,114 @@ private fun HistoryPhase(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun JlptBadge(level: String) {
+    val (bg, fg) = when (level) {
+        "N5" -> Color(0xFFDFF5E3) to Color(0xFF2E7D3F)
+        "N4" -> Color(0xFFDCEEFB) to Color(0xFF1A5F8A)
+        "N3" -> Color(0xFFFFF3CD) to Color(0xFF7A5500)
+        "N2" -> Color(0xFFFFE4D6) to Color(0xFF8B3A00)
+        "N1" -> Color(0xFFF3D6F5) to Color(0xFF6B0080)
+        else -> Color(0xFFEEEEEE) to Color(0xFF666666)
+    }
+    Box(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = level,
+            style = MaterialTheme.typography.labelSmall,
+            color = fg,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun QuotaExceededScreen(
+    capturesUsed: Int,
+    weeklyLimit: Int,
+    onUpgrade: () -> Unit,
+    onBack: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(WarmBg)
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(AccentOrange.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Outlined.CameraAlt,
+                contentDescription = null,
+                tint = AccentOrange,
+                modifier = Modifier.size(44.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
+        Text(
+            text = "You've used all $weeklyLimit free captures this week",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = TextDark,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "$capturesUsed / $weeklyLimit captures used. Upgrade to Plus for unlimited captures and watch every snap land in your daily deck.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = TextMuted,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Button(
+            onClick = onUpgrade,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentOrange)
+        ) {
+            Icon(
+                Icons.Outlined.Star,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                "Upgrade to Plus",
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onBack,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                contentColor = AccentOrange
+            ),
+            elevation = ButtonDefaults.buttonElevation(0.dp)
+        ) {
+            Text("Back", fontWeight = FontWeight.SemiBold)
         }
     }
 }

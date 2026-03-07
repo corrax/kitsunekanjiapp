@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -80,7 +83,10 @@ data class ProfileTabUiState(
     val jlptLevelDetails: List<JlptLevelDetail> = emptyList(),
     val selectedLevelIndex: Int = 0,
     val recentRuns: List<DeckRunHistoryItem> = emptyList(),
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isPlusEntitled: Boolean = false,
+    val capturesUsedThisWeek: Int = 0,
+    val freeWeeklyLimit: Int = 3
 )
 
 @Composable
@@ -88,6 +94,7 @@ fun ProfileTabScreen(
     state: ProfileTabUiState,
     onOpenRunReport: (String) -> Unit,
     onOpenUpgrade: () -> Unit,
+    onOpenHistory: () -> Unit = {},
     onPageChanged: (Int) -> Unit
 ) {
     val visuals = deckThemeDrawnVisuals(state.selectedThemeId)
@@ -143,7 +150,7 @@ fun ProfileTabScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                        painter = painterResource(id = R.drawable.ic_launcher_playstore),
                         contentDescription = null,
                         modifier = Modifier
                             .size(32.dp)
@@ -169,6 +176,15 @@ fun ProfileTabScreen(
 
             item {
                 RankCard(rankSummary = state.rankSummary)
+            }
+
+            item {
+                PlanCard(
+                    isPlusEntitled = state.isPlusEntitled,
+                    capturesUsedThisWeek = state.capturesUsedThisWeek,
+                    freeWeeklyLimit = state.freeWeeklyLimit,
+                    onUpgrade = onOpenUpgrade
+                )
             }
 
             item {
@@ -224,19 +240,59 @@ fun ProfileTabScreen(
 
             if (state.recentRuns.isNotEmpty()) {
                 item {
-                    Text(
-                        text = "Recent Activity",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextDark,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Recent Activity",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextDark
+                        )
+                        androidx.compose.material3.TextButton(onClick = onOpenHistory) {
+                            Text(
+                                text = "View all",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = AccentOrange
+                            )
+                        }
+                    }
                 }
 
                 items(state.recentRuns) { run ->
                     RunHistoryCard(
                         run = run,
                         onClick = { onOpenRunReport(run.deckRunId) }
+                    )
+                }
+            } else {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Recent Activity",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextDark
+                        )
+                        androidx.compose.material3.TextButton(onClick = onOpenHistory) {
+                            Text(
+                                text = "View all",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = AccentOrange
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Complete a deck to see your activity here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextMuted,
+                        modifier = Modifier.padding(top = 4.dp)
                     )
                 }
             }
@@ -545,6 +601,91 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
                 style = MaterialTheme.typography.labelSmall,
                 color = TextMuted
             )
+        }
+    }
+}
+
+@Composable
+private fun PlanCard(
+    isPlusEntitled: Boolean,
+    capturesUsedThisWeek: Int,
+    freeWeeklyLimit: Int,
+    onUpgrade: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = WarmSurface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (isPlusEntitled) "Kitsune Plus" else "Free Plan",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TextDark
+                )
+                if (isPlusEntitled) {
+                    Text(
+                        text = "Active",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0xFF1FA080))
+                            .padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            // Capture usage row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Captures this week",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted
+                )
+                Text(
+                    text = if (isPlusEntitled) "Unlimited" else "$capturesUsedThisWeek / $freeWeeklyLimit",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (!isPlusEntitled && capturesUsedThisWeek >= freeWeeklyLimit) AccentOrange else TextDark
+                )
+            }
+
+            if (!isPlusEntitled) {
+                LinearProgressIndicator(
+                    progress = { (capturesUsedThisWeek.toFloat() / freeWeeklyLimit).coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(4.dp)),
+                    color = if (capturesUsedThisWeek >= freeWeeklyLimit) AccentOrange else Color(0xFF1FA080),
+                    trackColor = Color(0xFFFFE0CC)
+                )
+                Button(
+                    onClick = onUpgrade,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentOrange,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Upgrade for unlimited captures", fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
     }
 }

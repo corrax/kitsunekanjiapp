@@ -3,11 +3,13 @@ package com.kitsune.kanji.japanese.flashcards.ui.settings
 import android.app.TimePickerDialog
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -59,7 +61,8 @@ data class SettingsTabUiState(
     val resetTimeText: String = "",
     val reminderTimeText: String = "",
     val errorMessage: String? = null,
-    val savedMessage: String? = null
+    val savedMessage: String? = null,
+    val isPlusEntitled: Boolean = false
 )
 
 @Composable
@@ -231,38 +234,40 @@ fun SettingsTabScreen(
                 }
             }
 
-            // Upgrade / Remove Ads card hidden for now
-            // item {
-            //     Card(
-            //         modifier = Modifier.fillMaxWidth(),
-            //         shape = RoundedCornerShape(12.dp),
-            //         colors = CardDefaults.cardColors(containerColor = WarmSurface),
-            //         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-            //         onClick = onOpenUpgrade
-            //     ) {
-            //         Row(
-            //             modifier = Modifier
-            //                 .fillMaxWidth()
-            //                 .padding(14.dp),
-            //             verticalAlignment = Alignment.CenterVertically,
-            //             horizontalArrangement = Arrangement.Center
-            //         ) {
-            //             Icon(
-            //                 imageVector = Icons.Outlined.Star,
-            //                 contentDescription = null,
-            //                 tint = AccentOrange,
-            //                 modifier = Modifier.size(18.dp)
-            //             )
-            //             Spacer(Modifier.padding(start = 6.dp))
-            //             Text(
-            //                 text = "Upgrade / Remove Ads",
-            //                 style = MaterialTheme.typography.labelLarge,
-            //                 color = AccentOrange,
-            //                 fontWeight = FontWeight.SemiBold
-            //             )
-            //         }
-            //     }
-            // }
+            if (!state.isPlusEntitled) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenUpgrade),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = WarmSurface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Star,
+                                contentDescription = null,
+                                tint = AccentOrange,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = "Upgrade to Plus",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AccentOrange,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
 
             item { Spacer(Modifier.height(80.dp)) }
         }
