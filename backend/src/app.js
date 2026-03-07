@@ -36,7 +36,11 @@ const ipPerMinuteLimit = Number(process.env.IP_PER_MINUTE_LIMIT || 60);
 const deviceHardBlockThresholdPerMinute = Number(
   process.env.DEVICE_HARD_BLOCK_THRESHOLD_PER_MINUTE || 120
 );
+const freeDeviceWeeklyLimit = Number(process.env.FREE_DEVICE_WEEKLY_LIMIT || 3);
 const disableAbuseProtection = process.env.DISABLE_ABUSE_PROTECTION === 'true';
+
+// Minimum token length for a plausible Google Play purchase token
+const MIN_PURCHASE_TOKEN_LENGTH = 100;
 
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 
@@ -136,15 +140,21 @@ function dayWindowStart(epochSeconds) {
   return Math.floor(epochSeconds / 86400) * 86400;
 }
 
+function weekWindowStart(epochSeconds) {
+  return Math.floor(epochSeconds / (86400 * 7)) * (86400 * 7);
+}
+
 function buildRetryAfter(windowStart, windowSeconds, nowSeconds) {
   return Math.max(1, windowStart + windowSeconds - nowSeconds);
 }
 
 async function incrementCounter(counterKey, nowSeconds, windowSeconds) {
   const windowStart =
-    windowSeconds === 86400
-      ? dayWindowStart(nowSeconds)
-      : minuteWindowStart(nowSeconds);
+    windowSeconds === 86400 * 7
+      ? weekWindowStart(nowSeconds)
+      : windowSeconds === 86400
+        ? dayWindowStart(nowSeconds)
+        : minuteWindowStart(nowSeconds);
   const expiresAt = windowStart + windowSeconds + 120;
 
   const result = await ddb.send(
@@ -238,6 +248,39 @@ async function trackDeviceProfile(deviceInfo, nowSeconds) {
       }
     })
   );
+}
+
+function isPlusToken(purchaseToken) {
+  return (
+    typeof purchaseToken === 'string' &&
+    purchaseToken.trim().length >= MIN_PURCHASE_TOKEN_LENGTH
+  );
+}
+
+async function checkFreeWeeklyQuota(deviceInfo, nowSeconds, purchaseToken) {
+  if (isPlusToken(purchaseToken)) {
+    return { exceeded: false };
+  }
+
+  const weekKey = `device_week#${deviceInfo.deviceId}#${weekWindowStart(nowSeconds)}`;
+  const deviceWeek = await incrementCounter(weekKey, nowSeconds, 86400 * 7);
+
+  if (deviceWeek.count > freeDeviceWeeklyLimit) {
+    const retryAfter = buildRetryAfter(deviceWeek.windowStart, 86400 * 7, nowSeconds);
+    return {
+      exceeded: true,
+      response: noStoreError(
+        402,
+        {
+          error: 'Free capture limit reached for this week. Upgrade to Plus for unlimited captures.',
+          errorCode: 'free_quota_exceeded'
+        },
+        retryAfter
+      )
+    };
+  }
+
+  return { exceeded: false };
 }
 
 async function enforceRateLimits(deviceInfo, nowSeconds) {
@@ -335,12 +378,18 @@ exports.handler = async (event) => {
       throw new Error('Required DynamoDB table env vars are not configured.');
     }
 
+    const purchaseToken = normalizedHeader(event?.headers, 'x-purchase-token');
+
     if (!disableAbuseProtection) {
       const nowSeconds = Math.floor(Date.now() / 1000);
       const deviceInfo = resolveClientInfo(event);
       const limitResult = await enforceRateLimits(deviceInfo, nowSeconds);
       if (limitResult.blocked) {
         return limitResult.response;
+      }
+      const quotaResult = await checkFreeWeeklyQuota(deviceInfo, nowSeconds, purchaseToken);
+      if (quotaResult.exceeded) {
+        return quotaResult.response;
       }
       await trackDeviceProfile(deviceInfo, nowSeconds);
     }
