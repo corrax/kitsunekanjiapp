@@ -1,0 +1,175 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Kitsune capture backend for Gemini 2.5 Flash image analysis.
+
+Parameters:
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Gemini API key used by the Lambda function.
+  AllowedOrigin:
+    Type: String
+    Default: "*"
+    Description: CORS origin allowed to call the API.
+  DevicePerMinuteLimit:
+    Type: Number
+    Default: 15
+    Description: Max requests per minute per device fingerprint.
+  DevicePerDayLimit:
+    Type: Number
+    Default: 300
+    Description: Max requests per UTC day per device fingerprint.
+  IpPerMinuteLimit:
+    Type: Number
+    Default: 60
+    Description: Max requests per minute per source IP.
+  DeviceHardBlockThresholdPerMinute:
+    Type: Number
+    Default: 120
+    Description: If exceeded, device is auto-blacklisted for 24h.
+  WafIpRateLimit5Min:
+    Type: Number
+    Default: 2000
+    Description: AWS WAF IP rate limit over a 5-minute window.
+  EnableWafAssociation:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+    Description: Set true to create and attach a WAF WebACL to the API stage.
+
+Conditions:
+  UseWafAssociation: !Equals [!Ref EnableWafAssociation, "true"]
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 30
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        GEMINI_API_KEY: !Ref GeminiApiKey
+        USAGE_COUNTERS_TABLE: !Ref UsageCountersTable
+        DEVICE_BLACKLIST_TABLE: !Ref DeviceBlacklistTable
+        DEVICE_PROFILES_TABLE: !Ref DeviceProfilesTable
+        DEVICE_PER_MINUTE_LIMIT: !Ref DevicePerMinuteLimit
+        DEVICE_PER_DAY_LIMIT: !Ref DevicePerDayLimit
+        IP_PER_MINUTE_LIMIT: !Ref IpPerMinuteLimit
+        DEVICE_HARD_BLOCK_THRESHOLD_PER_MINUTE: !Ref DeviceHardBlockThresholdPerMinute
+
+Resources:
+  CaptureApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedOrigin
+        AllowHeaders:
+          - content-type
+        AllowMethods:
+          - POST
+          - OPTIONS
+
+  UsageCountersTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: counterKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: counterKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  DeviceBlacklistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceId
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  DeviceProfilesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: deviceId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: deviceId
+          KeyType: HASH
+
+  AnalyzeJapaneseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: src/app.handler
+      Description: Accepts a base64-encoded image and returns extracted Japanese terms.
+      Policies:
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+            Resource:
+              - !GetAtt UsageCountersTable.Arn
+              - !GetAtt DeviceBlacklistTable.Arn
+              - !GetAtt DeviceProfilesTable.Arn
+      Events:
+        AnalyzeJapanese:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref CaptureApi
+            Path: /analyze-japanese
+            Method: POST
+
+  CaptureApiWebAcl:
+    Type: AWS::WAFv2::WebACL
+    Condition: UseWafAssociation
+    Properties:
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      VisibilityConfig:
+        CloudWatchMetricsEnabled: true
+        MetricName: KitsuneCaptureApiWebAcl
+        SampledRequestsEnabled: true
+      Rules:
+        - Name: IpRateLimit
+          Priority: 1
+          Statement:
+            RateBasedStatement:
+              AggregateKeyType: IP
+              Limit: !Ref WafIpRateLimit5Min
+          Action:
+            Block: {}
+          VisibilityConfig:
+            CloudWatchMetricsEnabled: true
+            MetricName: KitsuneCaptureApiIpRateLimit
+            SampledRequestsEnabled: true
+
+  CaptureApiWebAclAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Condition: UseWafAssociation
+    Properties:
+      ResourceArn: !Sub "arn:${AWS::Partition}:apigateway:${AWS::Region}::/apis/${CaptureApi}/stages/%24default"
+      WebACLArn: !GetAtt CaptureApiWebAcl.Arn
+
+Outputs:
+  AnalyzeJapaneseUrl:
+    Description: Endpoint to use for CAPTURE_BACKEND_URL in the Android app.
+    Value: !Sub "https://${CaptureApi}.execute-api.${AWS::Region}.amazonaws.com/analyze-japanese"

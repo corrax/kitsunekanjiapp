@@ -79,6 +79,51 @@ val deckThemeCatalog = listOf(
         )
     ),
     DeckThemeOption(
+        "konbini",
+        "Konbini & Labels",
+        "Beginner",
+        "Theme",
+        R.drawable.pack_scene_food,
+        contentTrackId = "konbini_core",
+        levels = listOf(
+            DeckLevelOption(1, "Drinks & Snacks"),
+            DeckLevelOption(2, "Checkout Phrases"),
+            DeckLevelOption(3, "Deals & Labels"),
+            DeckLevelOption(4, "Allergy & Ingredients"),
+            DeckLevelOption(5, "Konbini Conversations")
+        )
+    ),
+    DeckThemeOption(
+        "signs",
+        "Signs You See Everywhere",
+        "Beginner",
+        "Theme",
+        R.drawable.pack_scene_city,
+        contentTrackId = "signs_core",
+        levels = listOf(
+            DeckLevelOption(1, "Push or Pull"),
+            DeckLevelOption(2, "Open or Closed"),
+            DeckLevelOption(3, "Don't Do That"),
+            DeckLevelOption(4, "Useful Signs"),
+            DeckLevelOption(5, "Reading Real Signs")
+        )
+    ),
+    DeckThemeOption(
+        "adulting",
+        "Mail & Adulting",
+        "Beginner+",
+        "Theme",
+        R.drawable.pack_scene_city,
+        contentTrackId = "adulting_core",
+        levels = listOf(
+            DeckLevelOption(1, "Delivery Basics"),
+            DeckLevelOption(2, "Forms & Addresses"),
+            DeckLevelOption(3, "Receipts & Fees"),
+            DeckLevelOption(4, "Deadlines & Submissions"),
+            DeckLevelOption(5, "Office & Reception")
+        )
+    ),
+    DeckThemeOption(
         "daily_life",
         "Daily Life",
         "Beginner",
@@ -95,32 +140,32 @@ val deckThemeCatalog = listOf(
     ),
     DeckThemeOption(
         "food",
-        "Food & Menus",
+        "Food & Ordering",
         "Beginner+",
         "Theme",
         R.drawable.pack_scene_food,
         contentTrackId = "food_core",
         levels = listOf(
-            DeckLevelOption(1, "Ingredients"),
-            DeckLevelOption(2, "Ordering"),
-            DeckLevelOption(3, "Menus"),
-            DeckLevelOption(4, "Cooking Terms"),
-            DeckLevelOption(5, "Food Dialogues")
+            DeckLevelOption(1, "What's on the Menu"),
+            DeckLevelOption(2, "Protein Roulette"),
+            DeckLevelOption(3, "Sizing & Sides"),
+            DeckLevelOption(4, "Takeout & Sold Out"),
+            DeckLevelOption(5, "Restaurant Dialogues")
         )
     ),
     DeckThemeOption(
         "transport",
-        "Transport & Signs",
-        "Intermediate",
+        "Trains & Getting Around",
+        "Beginner+",
         "Theme",
         R.drawable.pack_scene_mountain,
         contentTrackId = "transport_core",
         levels = listOf(
-            DeckLevelOption(1, "Stations"),
-            DeckLevelOption(2, "Tickets"),
-            DeckLevelOption(3, "Directions"),
-            DeckLevelOption(4, "Warnings"),
-            DeckLevelOption(5, "Travel Phrases")
+            DeckLevelOption(1, "Finding Your Way"),
+            DeckLevelOption(2, "Express or Local"),
+            DeckLevelOption(3, "Transfers & Connections"),
+            DeckLevelOption(4, "Service Alerts"),
+            DeckLevelOption(5, "Station Dialogues")
         )
     ),
     DeckThemeOption(

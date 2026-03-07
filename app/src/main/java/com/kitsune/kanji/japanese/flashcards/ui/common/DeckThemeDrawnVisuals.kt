@@ -76,6 +76,9 @@ fun cardPaletteFor(sourceId: String?): CardPalette {
         key.contains("food") -> Color(0xFFE8853A)
         key.contains("transport") -> Color(0xFF5B9BD5)
         key.contains("shopping") -> Color(0xFFE07882)
+        key.contains("konbini") -> Color(0xFFE06820)
+        key.contains("signs") -> Color(0xFF6B8E5A)
+        key.contains("adulting") -> Color(0xFF7A6B5D)
         else -> Color(0xFFFF6B1A)
     }
     return buildPalette(
@@ -237,6 +240,39 @@ fun deckThemeDrawnVisuals(themeId: String?): DeckThemeDrawnVisuals {
             panelBorder = Color(0xFFFBCFE8),
             accent = Color(0xFFE07882),
             accentMuted = Color(0xFFFCE7F3)
+        )
+
+        "konbini" -> DeckThemeDrawnVisuals(
+            imageRes = theme.heroRes,
+            baseColor = Color(0xFFFFF5EB),
+            overlayTop = Color(0xCCFFFFFF),
+            overlayBottom = Color(0xF2FFF7EF),
+            panelColor = Color(0xEFFFFFFA),
+            panelBorder = Color(0xFFFFB87A),
+            accent = Color(0xFFE06820),
+            accentMuted = Color(0xFFFFD9B8)
+        )
+
+        "signs" -> DeckThemeDrawnVisuals(
+            imageRes = theme.heroRes,
+            baseColor = Color(0xFFF0F7EC),
+            overlayTop = Color(0xCCFFFFFF),
+            overlayBottom = Color(0xF2F5FAF0),
+            panelColor = Color(0xEFFFFFFD),
+            panelBorder = Color(0xFFA8D99A),
+            accent = Color(0xFF6B8E5A),
+            accentMuted = Color(0xFFD0E8C6)
+        )
+
+        "adulting" -> DeckThemeDrawnVisuals(
+            imageRes = theme.heroRes,
+            baseColor = Color(0xFFF5F2EF),
+            overlayTop = Color(0xCCFFFFFF),
+            overlayBottom = Color(0xF2F8F5F2),
+            panelColor = Color(0xEFFFFFFD),
+            panelBorder = Color(0xFFCABFB4),
+            accent = Color(0xFF7A6B5D),
+            accentMuted = Color(0xFFDDD5CC)
         )
 
         else -> DeckThemeDrawnVisuals(

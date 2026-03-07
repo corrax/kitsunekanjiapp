@@ -4,6 +4,9 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.kitsune.kanji.japanese.flashcards.data.local.dao.KitsuneDao
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedCardEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedMediaEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedTermEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.Converters
@@ -31,9 +34,12 @@ import com.kitsune.kanji.japanese.flashcards.data.local.entity.WritingTemplateEn
         CardAttemptEntity::class,
         SrsStateEntity::class,
         StreakStateEntity::class,
-        TrackAbilityEntity::class
+        TrackAbilityEntity::class,
+        CapturedMediaEntity::class,
+        CapturedTermEntity::class,
+        CapturedCardEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

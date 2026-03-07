@@ -15,8 +15,18 @@ class MainActivity : ComponentActivity() {
             isAppearanceLightStatusBars = true
             isAppearanceLightNavigationBars = true
         }
+        val deepLinkThemeId = parseDeepLinkThemeId()
         setContent {
-            KitsuneRoot()
+            KitsuneRoot(deepLinkThemeId = deepLinkThemeId)
         }
+    }
+
+    private fun parseDeepLinkThemeId(): String? {
+        val uri = intent?.data ?: return null
+        // kitsune://theme/{themeId}
+        if (uri.scheme == "kitsune" && uri.host == "theme") {
+            return uri.pathSegments?.firstOrNull()
+        }
+        return null
     }
 }

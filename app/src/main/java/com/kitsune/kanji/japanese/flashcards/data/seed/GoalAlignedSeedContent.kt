@@ -24,7 +24,10 @@ object GoalAlignedSeedContent {
         val food = buildFoodTrack()
         val transport = buildTransportTrack()
         val shopping = buildShoppingTrack()
-        val all = listOf(foundations, n4, n3, daily, dailyLife, food, transport, shopping)
+        val konbini = buildKonbiniTrack()
+        val signs = buildSignsTrack()
+        val adulting = buildAdultingTrack()
+        val all = listOf(foundations, n4, n3, daily, dailyLife, food, transport, shopping, konbini, signs, adulting)
         return SeedBundle(
             tracks = all.map { it.track },
             packs = all.flatMap { it.packs },
@@ -1035,7 +1038,17 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u96fb", "electricity"),
                 KanjiSeed("\u5929", "sky"),
                 KanjiSeed("\u4f11", "rest"),
-                KanjiSeed("\u6b69", "walk")
+                KanjiSeed("\u6b69", "walk"),
+                KanjiSeed("\u6708", "moon/month"),
+                KanjiSeed("\u706b", "fire"),
+                KanjiSeed("\u91d1", "gold/money"),
+                KanjiSeed("\u4eca", "now"),
+                KanjiSeed("\u524d", "before/front"),
+                KanjiSeed("\u898b", "see/look"),
+                KanjiSeed("\u50cd", "work"),
+                KanjiSeed("\u8cb7", "buy"),
+                KanjiSeed("\u4f1a", "meet"),
+                KanjiSeed("\u5b66", "study")
             ),
             vocabPool = listOf(
                 VocabSeed("\u53f0\u6240", "daidokoro", "kitchen", listOf("kitchen", "station", "office", "menu")),
@@ -1052,7 +1065,20 @@ object GoalAlignedSeedContent {
                 VocabSeed("\u96fb\u8a71", "denwa", "telephone", listOf("telephone", "television", "transfer", "ticket")),
                 VocabSeed("\u5929\u6c17", "tenki", "weather", listOf("weather", "promise", "direction", "price")),
                 VocabSeed("\u4f11\u307f", "yasumi", "holiday", listOf("holiday", "cleaning", "lesson", "ingredient")),
-                VocabSeed("\u6563\u6b69", "sanpo", "walk", listOf("walk", "meeting", "payment", "route"))
+                VocabSeed("\u6563\u6b69", "sanpo", "walk", listOf("walk", "meeting", "payment", "route")),
+                VocabSeed("\u4eca\u65e5", "kyou", "today", listOf("today", "tomorrow", "yesterday", "next week")),
+                VocabSeed("\u660e\u65e5", "ashita", "tomorrow", listOf("tomorrow", "today", "yesterday", "next week")),
+                VocabSeed("\u6708\u66dc\u65e5", "getsuyoubi", "Monday", listOf("Monday", "Tuesday", "Friday", "Sunday")),
+                VocabSeed("\u706b\u66dc\u65e5", "kayoubi", "Tuesday", listOf("Tuesday", "Monday", "Wednesday", "Thursday")),
+                VocabSeed("\u6c34\u66dc\u65e5", "suiyoubi", "Wednesday", listOf("Wednesday", "Thursday", "Monday", "Friday")),
+                VocabSeed("\u91d1\u66dc\u65e5", "kinyoubi", "Friday", listOf("Friday", "Saturday", "Monday", "Wednesday")),
+                VocabSeed("\u4f1a\u793e", "kaisha", "company", listOf("company", "school", "station", "hospital")),
+                VocabSeed("\u5b66\u6821", "gakkou", "school", listOf("school", "company", "library", "station")),
+                VocabSeed("\u4ed5\u4e8b", "shigoto", "work/job", listOf("work/job", "hobby", "vacation", "study")),
+                VocabSeed("\u52c9\u5f37", "benkyou", "study", listOf("study", "play", "rest", "work")),
+                VocabSeed("\u898b\u308b", "miru", "to see/watch", listOf("to see/watch", "to hear", "to go", "to eat")),
+                VocabSeed("\u50cd\u304f", "hataraku", "to work", listOf("to work", "to rest", "to play", "to eat")),
+                VocabSeed("\u4f1a\u3046", "au", "to meet", listOf("to meet", "to leave", "to buy", "to go"))
             )
         )
     }
@@ -1060,52 +1086,85 @@ object GoalAlignedSeedContent {
     private fun buildFoodTrack(): TrackSeed {
         return buildSimpleThemeTrack(
             trackId = "food_core",
-            title = "Food & Menus",
-            description = "Theme-specific food progression from ingredients and ordering through menu and dialogue practice.",
+            title = "Food & Ordering",
+            description = "Read menus, order confidently, and stop playing protein roulette.",
             accentColor = "#A86B3D",
             displayOrder = 9,
             levelTitles = listOf(
-                "Ingredients",
-                "Ordering",
-                "Menus",
-                "Cooking Terms",
-                "Food Dialogues",
-                "Restaurant Requests",
-                "Nutrition & Preferences",
-                "Service Nuance"
+                "What's on the Menu",
+                "Protein Roulette",
+                "Sizing & Sides",
+                "Takeout & Sold Out",
+                "Restaurant Dialogues",
+                "Kitchen & Cooking",
+                "Dietary Needs",
+                "Full Service Flow"
             ),
             kanjiPool = listOf(
+                KanjiSeed("\u725b", "cow"),
+                KanjiSeed("\u8c5a", "pig"),
+                KanjiSeed("\u9d8f", "chicken"),
+                KanjiSeed("\u5927", "big"),
+                KanjiSeed("\u76db", "serve/pile"),
+                KanjiSeed("\u6301", "hold"),
+                KanjiSeed("\u58f2", "sell"),
+                KanjiSeed("\u5207", "cut"),
+                KanjiSeed("\u5e2d", "seat"),
+                KanjiSeed("\u7159", "smoke"),
+                KanjiSeed("\u5b9a", "fixed"),
                 KanjiSeed("\u98df", "eat"),
                 KanjiSeed("\u98f2", "drink"),
-                KanjiSeed("\u6599", "cooking"),
-                KanjiSeed("\u5473", "taste"),
-                KanjiSeed("\u76bf", "plate"),
-                KanjiSeed("\u7c73", "rice"),
-                KanjiSeed("\u8089", "meat"),
+                KanjiSeed("\u9aa8", "bone"),
                 KanjiSeed("\u9b5a", "fish"),
-                KanjiSeed("\u8336", "tea"),
-                KanjiSeed("\u5e97", "shop"),
                 KanjiSeed("\u91ce", "field"),
-                KanjiSeed("\u679c", "fruit"),
-                KanjiSeed("\u5f01", "valve/bento"),
-                KanjiSeed("\u751f", "raw/fresh")
+                KanjiSeed("\u83dc", "vegetable"),
+                KanjiSeed("\u9eba", "noodle"),
+                KanjiSeed("\u4e3c", "rice bowl"),
+                KanjiSeed("\u8f9b", "spicy"),
+                KanjiSeed("\u5473", "flavor"),
+                KanjiSeed("\u4e88", "advance"),
+                KanjiSeed("\u7c73", "rice"),
+                KanjiSeed("\u6c34", "water"),
+                KanjiSeed("\u8089", "meat"),
+                KanjiSeed("\u671d", "morning"),
+                KanjiSeed("\u591c", "night"),
+                KanjiSeed("\u4eca", "now"),
+                KanjiSeed("\u8336", "tea")
             ),
             vocabPool = listOf(
-                VocabSeed("\u98df\u6750", "shokuzai", "ingredients", listOf("ingredients", "route", "ticket", "desk")),
-                VocabSeed("\u6ce8\u6587", "chuumon", "order", listOf("order", "schedule", "train line", "payment")),
-                VocabSeed("\u5358\u54c1", "tanpin", "single item", listOf("single item", "classroom", "discount", "station")),
-                VocabSeed("\u5b9a\u98df", "teishoku", "set meal", listOf("set meal", "ticket gate", "deadline", "contract")),
-                VocabSeed("\u98f2\u307f\u7269", "nomimono", "drink", listOf("drink", "meeting", "library", "receipt")),
-                VocabSeed("\u7518\u5473", "amami", "sweets", listOf("sweets", "transfer", "lecture", "invoice")),
-                VocabSeed("\u8f9b\u53e3", "karakuchi", "spicy", listOf("spicy", "cheap", "boarding", "change")),
-                VocabSeed("\u8abf\u7406", "chouri", "cooking", listOf("cooking", "route", "checkout", "station")),
-                VocabSeed("\u624b\u9806", "tejun", "steps", listOf("steps", "fare", "delivery", "platform")),
-                VocabSeed("\u4f1a\u8a08", "kaikei", "checkout", listOf("checkout", "class", "transfer", "menu")),
-                VocabSeed("\u91ce\u83dc", "yasai", "vegetables", listOf("vegetables", "station", "promise", "receipt")),
-                VocabSeed("\u679c\u7269", "kudamono", "fruit", listOf("fruit", "cleaning", "ticket", "meeting")),
-                VocabSeed("\u30c7\u30b6\u30fc\u30c8", "dezaato", "dessert", listOf("dessert", "direction", "payment", "homework")),
-                VocabSeed("\u5f01\u5f53", "bentou", "bento", listOf("bento", "kitchen", "laundry", "route")),
-                VocabSeed("\u30e1\u30cb\u30e5\u30fc", "menyuu", "menu", listOf("menu", "stock", "fare", "plan"))
+                VocabSeed("\u30e1\u30cb\u30e5\u30fc", "menyuu", "menu", listOf("menu", "receipt", "ticket", "platform")),
+                VocabSeed("\u304a\u3059\u3059\u3081", "osusume", "recommendation", listOf("recommendation", "discount", "receipt", "delay")),
+                VocabSeed("\u725b\u8089", "gyuuniku", "beef", listOf("beef", "pork", "chicken", "fish")),
+                VocabSeed("\u8c5a\u8089", "butaniku", "pork", listOf("pork", "beef", "chicken", "vegetables")),
+                VocabSeed("\u9d8f\u8089", "toriniku", "chicken", listOf("chicken", "beef", "fish", "pork")),
+                VocabSeed("\u5927\u76db", "oomori", "large serving", listOf("large serving", "small portion", "half price", "takeout")),
+                VocabSeed("\u6301\u3061\u5e30\u308a", "mochikaeri", "takeout", listOf("takeout", "dine-in", "delivery", "reservation")),
+                VocabSeed("\u58f2\u308a\u5207\u308c", "urikire", "sold out", listOf("sold out", "in stock", "half price", "new item")),
+                VocabSeed("\u713c\u304d\u9ce5", "yakitori", "grilled chicken", listOf("grilled chicken", "fried rice", "ramen", "sushi")),
+                VocabSeed("\u3064\u3051\u9eba", "tsukemen", "dipping noodles", listOf("dipping noodles", "fried noodles", "udon", "soba")),
+                VocabSeed("\u8c5a\u9aa8", "tonkotsu", "pork bone broth", listOf("pork bone broth", "soy sauce", "salt", "miso")),
+                VocabSeed("\u7981\u7159", "kinen", "no smoking", listOf("no smoking", "smoking area", "exit", "entrance")),
+                VocabSeed("\u5b9a\u98df", "teishoku", "set meal", listOf("set meal", "single item", "dessert", "appetizer")),
+                VocabSeed("\u6ce8\u6587", "chuumon", "order", listOf("order", "receipt", "payment", "menu")),
+                VocabSeed("\u4f1a\u8a08", "kaikei", "bill", listOf("bill", "tip", "tax", "change")),
+                VocabSeed("\u9b5a", "sakana", "fish", listOf("fish", "meat", "rice", "soup")),
+                VocabSeed("\u91ce\u83dc", "yasai", "vegetables", listOf("vegetables", "fruit", "meat", "rice")),
+                VocabSeed("\u30e9\u30fc\u30e1\u30f3", "raamen", "ramen", listOf("ramen", "udon", "soba", "curry")),
+                VocabSeed("\u4e3c", "donburi", "rice bowl", listOf("rice bowl", "soup bowl", "plate", "cup")),
+                VocabSeed("\u8f9b\u3044", "karai", "spicy", listOf("spicy", "sweet", "sour", "salty")),
+                VocabSeed("\u4e88\u7d04", "yoyaku", "reservation", listOf("reservation", "cancellation", "order", "receipt")),
+                VocabSeed("\u5473", "aji", "taste/flavor", listOf("taste/flavor", "color", "smell", "sound")),
+                VocabSeed("\u304a\u6c34", "omizu", "water", listOf("water", "tea", "juice", "beer")),
+                VocabSeed("\u3054\u98ef", "gohan", "rice/meal", listOf("rice/meal", "bread", "noodles", "dessert")),
+                VocabSeed("\u30c7\u30b6\u30fc\u30c8", "dezaato", "dessert", listOf("dessert", "appetizer", "main course", "salad")),
+                VocabSeed("\u98df\u3079\u653e\u984c", "tabehoudai", "all-you-can-eat", listOf("all-you-can-eat", "set meal", "takeout", "reservation")),
+                VocabSeed("\u3044\u305f\u3060\u304d\u307e\u3059", "itadakimasu", "meal greeting", listOf("meal greeting", "goodbye", "thank you", "excuse me")),
+                VocabSeed("\u304a\u52d8\u5b9a", "okanjou", "check/bill", listOf("check/bill", "menu", "receipt", "tip")),
+                VocabSeed("\u8089", "niku", "meat", listOf("meat", "fish", "rice", "vegetable")),
+                VocabSeed("\u671d\u3054\u306f\u3093", "asagohan", "breakfast", listOf("breakfast", "lunch", "dinner", "snack")),
+                VocabSeed("\u665a\u3054\u306f\u3093", "bangohan", "dinner", listOf("dinner", "breakfast", "lunch", "snack")),
+                VocabSeed("\u304a\u8336", "ocha", "tea", listOf("tea", "water", "coffee", "juice")),
+                VocabSeed("\u4eca\u65e5\u306e\u304a\u3059\u3059\u3081", "kyou no osusume", "today's recommendation", listOf("today's recommendation", "set meal", "dessert", "drink menu"))
             )
         )
     }
@@ -1113,52 +1172,83 @@ object GoalAlignedSeedContent {
     private fun buildTransportTrack(): TrackSeed {
         return buildSimpleThemeTrack(
             trackId = "transport_core",
-            title = "Transport & Signs",
-            description = "Theme-specific progression for station flow, tickets, routes, warnings, and travel phrases.",
+            title = "Trains & Getting Around",
+            description = "Stop following crowds and start reading the signs. Exit, express, transfer, last train.",
             accentColor = "#5B7891",
             displayOrder = 10,
             levelTitles = listOf(
-                "Stations",
-                "Tickets",
-                "Directions",
-                "Warnings",
-                "Travel Phrases",
-                "Service Disruptions",
-                "Complex Transfers",
-                "Travel Dialogues+"
+                "Finding Your Way",
+                "Express or Local",
+                "Transfers & Connections",
+                "Service Alerts",
+                "Station Dialogues",
+                "Complex Routes",
+                "Travel Planning",
+                "Commuter Confidence"
             ),
             kanjiPool = listOf(
-                KanjiSeed("\u99c5", "station"),
-                KanjiSeed("\u7dda", "line"),
-                KanjiSeed("\u53e3", "gate"),
-                KanjiSeed("\u9053", "road"),
-                KanjiSeed("\u65c5", "travel"),
-                KanjiSeed("\u4e57", "board"),
-                KanjiSeed("\u964d", "get off"),
-                KanjiSeed("\u901f", "fast"),
-                KanjiSeed("\u9045", "late"),
-                KanjiSeed("\u8eca", "vehicle"),
-                KanjiSeed("\u98db", "fly"),
                 KanjiSeed("\u51fa", "exit"),
                 KanjiSeed("\u5165", "enter"),
-                KanjiSeed("\u523b", "engrave/time")
+                KanjiSeed("\u53e3", "gate/mouth"),
+                KanjiSeed("\u6025", "express/urgent"),
+                KanjiSeed("\u5404", "each"),
+                KanjiSeed("\u99c5", "station"),
+                KanjiSeed("\u4e57", "ride"),
+                KanjiSeed("\u63db", "exchange"),
+                KanjiSeed("\u904b", "operate/carry"),
+                KanjiSeed("\u8ee2", "turn/roll"),
+                KanjiSeed("\u6700", "most"),
+                KanjiSeed("\u7d42", "end/finish"),
+                KanjiSeed("\u512a", "gentle/priority"),
+                KanjiSeed("\u5148", "ahead/previous"),
+                KanjiSeed("\u5317", "north"),
+                KanjiSeed("\u5357", "south"),
+                KanjiSeed("\u6771", "east"),
+                KanjiSeed("\u897f", "west"),
+                KanjiSeed("\u756a", "number"),
+                KanjiSeed("\u7dda", "line"),
+                KanjiSeed("\u767a", "depart"),
+                KanjiSeed("\u7740", "arrive"),
+                KanjiSeed("\u7247", "one-way"),
+                KanjiSeed("\u8fd4", "return"),
+                KanjiSeed("\u9580", "gate"),
+                KanjiSeed("\u884c", "go"),
+                KanjiSeed("\u6765", "come"),
+                KanjiSeed("\u96fb", "electric")
             ),
             vocabPool = listOf(
-                VocabSeed("\u6539\u672d", "kaisatsu", "ticket gate", listOf("ticket gate", "menu", "discount", "assignment")),
-                VocabSeed("\u5207\u7b26", "kippu", "ticket", listOf("ticket", "kitchen", "meeting", "price")),
-                VocabSeed("\u4e57\u63db", "norikae", "transfer", listOf("transfer", "checkout", "dialogue", "lesson")),
-                VocabSeed("\u65b9\u9762", "houmen", "direction", listOf("direction", "receipt", "ingredient", "homework")),
-                VocabSeed("\u8def\u7dda", "rosen", "route", listOf("route", "menu", "cash", "office")),
-                VocabSeed("\u904b\u8cc3", "unchin", "fare", listOf("fare", "dish", "stationery", "topic")),
-                VocabSeed("\u7d42\u70b9", "shuuten", "terminal", listOf("terminal", "payment", "set meal", "submission")),
-                VocabSeed("\u4e57\u8eca", "jousha", "boarding", listOf("boarding", "lesson", "laundry", "discount")),
-                VocabSeed("\u4e0b\u8eca", "gesha", "getting off", listOf("getting off", "inventory", "conversation", "kitchen")),
-                VocabSeed("\u9045\u5ef6", "chien", "delay", listOf("delay", "entryway", "sweets", "report")),
-                VocabSeed("\u30d0\u30b9", "basu", "bus", listOf("bus", "train", "taxi", "bicycle")),
-                VocabSeed("\u98db\u884c\u6a5f", "hikouki", "airplane", listOf("airplane", "ticket", "station", "platform")),
                 VocabSeed("\u51fa\u53e3", "deguchi", "exit", listOf("exit", "entrance", "ticket gate", "platform")),
-                VocabSeed("\u5165\u53e3", "iriguchi", "entrance", listOf("entrance", "exit", "fare", "delay")),
-                VocabSeed("\u6642\u523b\u8868", "jikokuhyou", "timetable", listOf("timetable", "receipt", "menu", "plan"))
+                VocabSeed("\u5165\u53e3", "iriguchi", "entrance", listOf("entrance", "exit", "transfer", "platform")),
+                VocabSeed("\u6025\u884c", "kyuukou", "express train", listOf("express train", "local train", "bullet train", "bus")),
+                VocabSeed("\u5404\u99c5\u505c\u8eca", "kakueki teisha", "local train", listOf("local train", "express train", "last train", "first train")),
+                VocabSeed("\u4e57\u63db", "norikae", "transfer", listOf("transfer", "exit", "ticket", "delay")),
+                VocabSeed("\u884c\u5148", "yukisaki", "destination", listOf("destination", "departure", "transfer", "delay")),
+                VocabSeed("\u904b\u8ee2\u898b\u5408\u308f\u305b", "unten miawase", "service suspended", listOf("service suspended", "on time", "delayed", "canceled")),
+                VocabSeed("\u6700\u7d42", "saishuu", "last (train)", listOf("last (train)", "first (train)", "express", "local")),
+                VocabSeed("\u512a\u5148\u5e2d", "yuusenseki", "priority seat", listOf("priority seat", "reserved seat", "free seat", "exit seat")),
+                VocabSeed("\u9045\u5ef6", "chien", "delay", listOf("delay", "on time", "canceled", "suspended")),
+                VocabSeed("\u6539\u672d", "kaisatsu", "ticket gate", listOf("ticket gate", "exit", "platform", "counter")),
+                VocabSeed("\u5207\u7b26", "kippu", "ticket", listOf("ticket", "receipt", "pass", "fare")),
+                VocabSeed("\u6642\u523b\u8868", "jikokuhyou", "timetable", listOf("timetable", "ticket", "fare chart", "map")),
+                VocabSeed("\u65b9\u9762", "houmen", "direction (bound for)", listOf("direction (bound for)", "transfer", "exit", "entrance")),
+                VocabSeed("\u9045\u5ef6\u8a3c\u660e\u66f8", "chien shoumeisho", "delay certificate", listOf("delay certificate", "ticket refund", "lost item form", "complaint form")),
+                VocabSeed("\u5317\u53e3", "kitaguchi", "north exit", listOf("north exit", "south exit", "east exit", "west exit")),
+                VocabSeed("\u5357\u53e3", "minamiguchi", "south exit", listOf("south exit", "north exit", "main exit", "back exit")),
+                VocabSeed("\u30db\u30fc\u30e0", "hoomu", "platform", listOf("platform", "ticket gate", "exit", "escalator")),
+                VocabSeed("\u7247\u9053", "katamichi", "one-way", listOf("one-way", "round trip", "transfer", "express")),
+                VocabSeed("\u5f80\u5fa9", "oufuku", "round trip", listOf("round trip", "one-way", "transfer", "express")),
+                VocabSeed("\u767a\u8eca", "hassha", "departure", listOf("departure", "arrival", "transfer", "delay")),
+                VocabSeed("\u5230\u7740", "touchaku", "arrival", listOf("arrival", "departure", "transfer", "canceled")),
+                VocabSeed("\u5feb\u901f", "kaisoku", "rapid train", listOf("rapid train", "local train", "express", "bullet train")),
+                VocabSeed("\u7279\u6025", "tokkyuu", "limited express", listOf("limited express", "local train", "rapid", "commuter")),
+                VocabSeed("\u904b\u8cc3", "unchin", "fare", listOf("fare", "ticket", "pass", "receipt")),
+                VocabSeed("\u5b9a\u671f\u5238", "teikiken", "commuter pass", listOf("commuter pass", "single ticket", "fare card", "receipt")),
+                VocabSeed("\u59cb\u767a", "shihatsu", "first train", listOf("first train", "last train", "express", "local")),
+                VocabSeed("\u7d42\u96fb", "shuuden", "last train", listOf("last train", "first train", "express", "rapid")),
+                VocabSeed("\u96fb\u8eca", "densha", "train", listOf("train", "bus", "taxi", "bicycle")),
+                VocabSeed("\u6539\u672d\u53e3", "kaisatsuguchi", "ticket gate", listOf("ticket gate", "exit", "platform", "entrance")),
+                VocabSeed("\u884c\u304f", "iku", "to go", listOf("to go", "to come", "to return", "to stop")),
+                VocabSeed("\u6765\u308b", "kuru", "to come", listOf("to come", "to go", "to return", "to leave"))
             )
         )
     }
@@ -1194,24 +1284,305 @@ object GoalAlignedSeedContent {
                 KanjiSeed("\u888b", "bag"),
                 KanjiSeed("\u58f2", "sell"),
                 KanjiSeed("\u8cb7", "buy"),
-                KanjiSeed("\u9818", "receipt/territory")
+                KanjiSeed("\u9818", "receipt/territory"),
+                KanjiSeed("\u8272", "color"),
+                KanjiSeed("\u91cd", "heavy/weight"),
+                KanjiSeed("\u8efd", "light (weight)"),
+                KanjiSeed("\u65b0", "new"),
+                KanjiSeed("\u53e4", "old"),
+                KanjiSeed("\u7a0e", "tax"),
+                KanjiSeed("\u7a7a", "empty"),
+                KanjiSeed("\u5305", "wrap"),
+                KanjiSeed("\u9078", "choose"),
+                KanjiSeed("\u63a2", "search"),
+                KanjiSeed("\u5343", "thousand"),
+                KanjiSeed("\u767e", "hundred"),
+                KanjiSeed("\u4e07", "ten thousand"),
+                KanjiSeed("\u5927", "big"),
+                KanjiSeed("\u5c0f", "small"),
+                KanjiSeed("\u591a", "many"),
+                KanjiSeed("\u5c11", "few")
             ),
             vocabPool = listOf(
-                VocabSeed("\u4fa1\u683c", "kakaku", "price", listOf("price", "station line", "dish", "class")),
-                VocabSeed("\u5408\u8a08", "goukei", "total", listOf("total", "platform", "kitchen", "route")),
-                VocabSeed("\u5728\u5eab", "zaiko", "stock", listOf("stock", "ticket gate", "meeting", "fare")),
-                VocabSeed("\u652f\u6255\u3044", "shiharai", "payment", listOf("payment", "menu", "schedule", "teacher")),
-                VocabSeed("\u73fe\u91d1", "genkin", "cash", listOf("cash", "set meal", "transfer", "dialogue")),
-                VocabSeed("\u5272\u5f15", "waribiki", "discount", listOf("discount", "homework", "boarding", "ingredient")),
-                VocabSeed("\u8fd4\u54c1", "henpin", "return", listOf("return", "kitchen", "route", "station")),
-                VocabSeed("\u4ea4\u63db", "koukan", "exchange", listOf("exchange", "lesson", "laundry", "topic")),
-                VocabSeed("\u63a5\u5ba2", "sekkyaku", "customer service", listOf("customer service", "line", "ticket", "menu")),
-                VocabSeed("\u8a66\u7740", "shichaku", "fitting", listOf("fitting", "receipt", "meeting", "entryway")),
+                VocabSeed("\u4fa1\u683c", "kakaku", "price", listOf("price", "size", "color", "weight")),
+                VocabSeed("\u5408\u8a08", "goukei", "total", listOf("total", "subtotal", "tax", "discount")),
+                VocabSeed("\u5728\u5eab", "zaiko", "stock", listOf("stock", "sold out", "on order", "limited")),
+                VocabSeed("\u652f\u6255\u3044", "shiharai", "payment", listOf("payment", "refund", "deposit", "receipt")),
+                VocabSeed("\u73fe\u91d1", "genkin", "cash", listOf("cash", "credit card", "e-money", "points")),
+                VocabSeed("\u5272\u5f15", "waribiki", "discount", listOf("discount", "surcharge", "tax", "tip")),
+                VocabSeed("\u8fd4\u54c1", "henpin", "return (item)", listOf("return (item)", "exchange", "refund", "repair")),
+                VocabSeed("\u4ea4\u63db", "koukan", "exchange", listOf("exchange", "return", "repair", "refund")),
+                VocabSeed("\u63a5\u5ba2", "sekkyaku", "customer service", listOf("customer service", "self-service", "delivery", "pickup")),
+                VocabSeed("\u8a66\u7740", "shichaku", "fitting/trying on", listOf("fitting/trying on", "purchase", "return", "exchange")),
                 VocabSeed("\u30b5\u30a4\u30ba", "saizu", "size", listOf("size", "color", "price", "weight")),
-                VocabSeed("\u30ec\u30b8", "reji", "register", listOf("register", "exit", "gate", "counter")),
+                VocabSeed("\u30ec\u30b8", "reji", "register", listOf("register", "exit", "shelf", "counter")),
                 VocabSeed("\u888b", "fukuro", "bag", listOf("bag", "box", "plate", "cup")),
-                VocabSeed("\u9818\u53ce\u66f8", "ryoushuusho", "receipt", listOf("receipt", "ticket", "menu", "invoice")),
-                VocabSeed("\u30bb\u30fc\u30eb", "seeru", "sale", listOf("sale", "return", "exchange", "stock"))
+                VocabSeed("\u9818\u53ce\u66f8", "ryoushuusho", "receipt", listOf("receipt", "ticket", "invoice", "warranty card")),
+                VocabSeed("\u30bb\u30fc\u30eb", "seeru", "sale", listOf("sale", "return", "exchange", "stock")),
+                VocabSeed("\u8272", "iro", "color", listOf("color", "size", "shape", "weight")),
+                VocabSeed("\u65b0\u54c1", "shinpin", "brand new", listOf("brand new", "used", "refurbished", "damaged")),
+                VocabSeed("\u4e2d\u53e4", "chuuko", "secondhand", listOf("secondhand", "brand new", "limited", "exclusive")),
+                VocabSeed("\u7a0e\u8fbc", "zeikomi", "tax included", listOf("tax included", "before tax", "after discount", "free")),
+                VocabSeed("\u5305\u88c5", "housou", "wrapping", listOf("wrapping", "bag", "box", "delivery")),
+                VocabSeed("\u304a\u91e3\u308a", "otsuri", "change (money)", listOf("change (money)", "receipt", "total", "tax")),
+                VocabSeed("\u30af\u30ec\u30b8\u30c3\u30c8\u30ab\u30fc\u30c9", "kurejitto kaado", "credit card", listOf("credit card", "cash", "e-money", "gift card")),
+                VocabSeed("\u54c1\u5207\u308c", "shinagire", "out of stock", listOf("out of stock", "in stock", "on sale", "new arrival")),
+                VocabSeed("\u304a\u5f97", "otoku", "good deal/bargain", listOf("good deal/bargain", "overpriced", "sold out", "limited")),
+                VocabSeed("\u5024\u6bb5", "nedan", "price (tag)", listOf("price (tag)", "barcode", "label", "receipt")),
+                VocabSeed("\u304a\u53d6\u308a\u7f6e\u304d", "otorioki", "item hold/reserve", listOf("item hold/reserve", "return", "delivery", "exchange")),
+                VocabSeed("\u914d\u9001", "haisou", "delivery/shipping", listOf("delivery/shipping", "pickup", "return", "exchange")),
+                VocabSeed("\u9001\u6599", "souryou", "shipping fee", listOf("shipping fee", "handling fee", "tax", "discount")),
+                VocabSeed("\u5343\u5186", "sen en", "1,000 yen", listOf("1,000 yen", "100 yen", "10,000 yen", "500 yen")),
+                VocabSeed("\u767e\u5186", "hyaku en", "100 yen", listOf("100 yen", "1,000 yen", "10 yen", "500 yen")),
+                VocabSeed("\u4e00\u4e07\u5186", "ichiman en", "10,000 yen", listOf("10,000 yen", "1,000 yen", "100 yen", "5,000 yen")),
+                VocabSeed("\u5927\u304d\u3044", "ookii", "big/large", listOf("big/large", "small", "heavy", "light")),
+                VocabSeed("\u5c0f\u3055\u3044", "chiisai", "small", listOf("small", "big", "many", "few")),
+                VocabSeed("\u591a\u3044", "ooi", "many/much", listOf("many/much", "few", "big", "small")),
+                VocabSeed("\u5c11\u306a\u3044", "sukunai", "few/little", listOf("few/little", "many", "big", "cheap"))
+            )
+        )
+    }
+
+    private fun buildKonbiniTrack(): TrackSeed {
+        return buildSimpleThemeTrack(
+            trackId = "konbini_core",
+            title = "Konbini & Labels",
+            description = "Read drink labels, survive checkout, and decode limited-edition snacks.",
+            accentColor = "#E06820",
+            displayOrder = 8,
+            levelTitles = listOf(
+                "Drinks & Snacks",
+                "Checkout Phrases",
+                "Deals & Labels",
+                "Allergy & Ingredients",
+                "Konbini Conversations",
+                "Seasonal Specials",
+                "Health Labels",
+                "Konbini Pro"
+            ),
+            kanjiPool = listOf(
+                KanjiSeed("\u7cd6", "sugar"),
+                KanjiSeed("\u7518", "sweet"),
+                KanjiSeed("\u8f9b", "spicy"),
+                KanjiSeed("\u6e29", "warm"),
+                KanjiSeed("\u888b", "bag"),
+                KanjiSeed("\u534a", "half"),
+                KanjiSeed("\u984d", "amount"),
+                KanjiSeed("\u9650", "limit"),
+                KanjiSeed("\u671f", "period"),
+                KanjiSeed("\u9593", "between"),
+                KanjiSeed("\u65b0", "new"),
+                KanjiSeed("\u5546", "commerce"),
+                KanjiSeed("\u54c1", "goods"),
+                KanjiSeed("\u8cde", "prize/expiry"),
+                KanjiSeed("\u51b7", "cold"),
+                KanjiSeed("\u70ed", "hot"),
+                KanjiSeed("\u5869", "salt"),
+                KanjiSeed("\u5375", "egg"),
+                KanjiSeed("\u4e73", "milk"),
+                KanjiSeed("\u7a0e", "tax"),
+                KanjiSeed("\u5186", "yen"),
+                KanjiSeed("\u8336", "tea"),
+                KanjiSeed("\u5f01", "lunch box"),
+                KanjiSeed("\u5f53", "this/hit")
+            ),
+            vocabPool = listOf(
+                VocabSeed("\u7121\u7cd6", "mutou", "sugar-free", listOf("sugar-free", "sweet", "spicy", "sour")),
+                VocabSeed("\u65b0\u5546\u54c1", "shinshouhin", "new product", listOf("new product", "sold out", "half price", "limited")),
+                VocabSeed("\u6e29\u3081\u307e\u3059\u304b", "atatamemasu ka", "shall I heat it?", listOf("shall I heat it?", "need a bag?", "is that all?", "cash or card?")),
+                VocabSeed("\u888b\u3044\u308a\u307e\u3059\u304b", "fukuro irimasu ka", "need a bag?", listOf("need a bag?", "shall I heat it?", "need chopsticks?", "is that all?")),
+                VocabSeed("\u534a\u984d", "hangaku", "half price", listOf("half price", "full price", "new product", "sold out")),
+                VocabSeed("\u671f\u9593\u9650\u5b9a", "kikan gentei", "limited time", listOf("limited time", "always available", "new product", "sold out")),
+                VocabSeed("\u5b63\u7bc0\u9650\u5b9a", "kisetsu gentei", "seasonal limited", listOf("seasonal limited", "year-round", "half price", "new release")),
+                VocabSeed("\u30a2\u30ec\u30eb\u30ae\u30fc\u8868\u793a", "arerugii hyouji", "allergy info", listOf("allergy info", "nutrition facts", "ingredients", "expiry date")),
+                VocabSeed("\u8cde\u5473\u671f\u9650", "shoumi kigen", "best before date", listOf("best before date", "allergy info", "price tag", "barcode")),
+                VocabSeed("\u30ec\u30b8", "reji", "register", listOf("register", "exit", "shelf", "fridge")),
+                VocabSeed("\u304a\u4f1a\u8a08", "okaikei", "checkout/bill", listOf("checkout/bill", "receipt", "change", "bag")),
+                VocabSeed("\u539f\u6750\u6599", "genzairyou", "ingredients (label)", listOf("ingredients (label)", "allergy info", "calories", "price")),
+                VocabSeed("\u7518\u53e3", "amakuchi", "mild/sweet", listOf("mild/sweet", "spicy", "sour", "bitter")),
+                VocabSeed("\u8f9b\u53e3", "karakuchi", "spicy/hot", listOf("spicy/hot", "mild", "sweet", "salty")),
+                VocabSeed("\u304a\u7b38", "ohashi", "chopsticks", listOf("chopsticks", "spoon", "fork", "bag")),
+                VocabSeed("\u51b7\u305f\u3044", "tsumetai", "cold (to touch)", listOf("cold (to touch)", "hot", "warm", "cool")),
+                VocabSeed("\u6e29\u304b\u3044", "atatakai", "warm", listOf("warm", "cold", "hot", "cool")),
+                VocabSeed("\u5869\u5206", "enbun", "salt content", listOf("salt content", "sugar content", "calories", "fat")),
+                VocabSeed("\u5375", "tamago", "egg", listOf("egg", "milk", "wheat", "soy")),
+                VocabSeed("\u7a0e\u8fbc", "zeikomi", "tax included", listOf("tax included", "before tax", "discount", "free")),
+                VocabSeed("\u7a0e\u629c", "zeinuki", "before tax", listOf("before tax", "tax included", "total", "change")),
+                VocabSeed("\u304a\u5f01\u5f53", "obentou", "bento/boxed lunch", listOf("bento/boxed lunch", "rice ball", "sandwich", "salad")),
+                VocabSeed("\u304a\u306b\u304e\u308a", "onigiri", "rice ball", listOf("rice ball", "bento", "sandwich", "bread")),
+                VocabSeed("\u304a\u8336", "ocha", "tea", listOf("tea", "coffee", "water", "juice")),
+                VocabSeed("\u30ab\u30ed\u30ea\u30fc", "karorii", "calories", listOf("calories", "salt", "sugar", "protein")),
+                VocabSeed("\u304a\u91e3\u308a", "otsuri", "change (money)", listOf("change (money)", "receipt", "total", "discount")),
+                VocabSeed("\u30dd\u30a4\u30f3\u30c8\u30ab\u30fc\u30c9", "pointo kaado", "point card", listOf("point card", "credit card", "cash", "receipt")),
+                VocabSeed("\u96fb\u5b50\u30ec\u30f3\u30b8", "denshi renji", "microwave", listOf("microwave", "oven", "fridge", "stove"))
+            )
+        )
+    }
+
+    private fun buildSignsTrack(): TrackSeed {
+        return buildSimpleThemeTrack(
+            trackId = "signs_core",
+            title = "Signs You See Everywhere",
+            description = "Push or pull? Open or closed? Stop tugging on locked doors.",
+            accentColor = "#6B8E5A",
+            displayOrder = 12,
+            levelTitles = listOf(
+                "Push or Pull",
+                "Open or Closed",
+                "Don't Do That",
+                "Useful Signs",
+                "Reading Real Signs",
+                "Warnings & Safety",
+                "Public Facilities",
+                "Sign Fluency"
+            ),
+            kanjiPool = listOf(
+                KanjiSeed("\u62bc", "push"),
+                KanjiSeed("\u5f15", "pull"),
+                KanjiSeed("\u958b", "open"),
+                KanjiSeed("\u55b6", "operate"),
+                KanjiSeed("\u696d", "business"),
+                KanjiSeed("\u4f11", "rest/holiday"),
+                KanjiSeed("\u7981", "prohibit"),
+                KanjiSeed("\u6b62", "stop"),
+                KanjiSeed("\u6ce8", "caution"),
+                KanjiSeed("\u5de5", "construction"),
+                KanjiSeed("\u4e8b", "thing/matter"),
+                KanjiSeed("\u975e", "not/emergency"),
+                KanjiSeed("\u5e38", "usual"),
+                KanjiSeed("\u7acb", "stand"),
+                KanjiSeed("\u53f3", "right"),
+                KanjiSeed("\u5de6", "left"),
+                KanjiSeed("\u4e0a", "up"),
+                KanjiSeed("\u4e0b", "down"),
+                KanjiSeed("\u968e", "floor/story"),
+                KanjiSeed("\u7537", "man"),
+                KanjiSeed("\u5973", "woman"),
+                KanjiSeed("\u7121", "none/without"),
+                KanjiSeed("\u6709", "have/exist"),
+                KanjiSeed("\u6545", "reason/breakdown"),
+                KanjiSeed("\u9589", "close/shut"),
+                KanjiSeed("\u4e2d", "middle/inside"),
+                KanjiSeed("\u6e80", "full"),
+                KanjiSeed("\u6771", "east"),
+                KanjiSeed("\u897f", "west"),
+                KanjiSeed("\u5317", "north"),
+                KanjiSeed("\u5357", "south")
+            ),
+            vocabPool = listOf(
+                VocabSeed("\u62bc\u3059", "osu", "push", listOf("push", "pull", "open", "close")),
+                VocabSeed("\u5f15\u304f", "hiku", "pull", listOf("pull", "push", "lift", "slide")),
+                VocabSeed("\u5165\u53e3", "iriguchi", "entrance", listOf("entrance", "exit", "stairs", "elevator")),
+                VocabSeed("\u51fa\u53e3", "deguchi", "exit", listOf("exit", "entrance", "gate", "door")),
+                VocabSeed("\u55b6\u696d\u4e2d", "eigyouchuu", "open for business", listOf("open for business", "closed", "under construction", "out of stock")),
+                VocabSeed("\u5b9a\u4f11\u65e5", "teikyuubi", "regular holiday", listOf("regular holiday", "business hours", "open today", "24 hours")),
+                VocabSeed("\u6e96\u5099\u4e2d", "junbichuu", "preparing/not ready", listOf("preparing/not ready", "open now", "closed forever", "on sale")),
+                VocabSeed("\u7981\u6b62", "kinshi", "prohibited", listOf("prohibited", "allowed", "recommended", "required")),
+                VocabSeed("\u6ce8\u610f", "chuui", "caution", listOf("caution", "safe", "exit", "entrance")),
+                VocabSeed("\u5de5\u4e8b\u4e2d", "koujichuu", "under construction", listOf("under construction", "open for business", "closed today", "on sale")),
+                VocabSeed("\u975e\u5e38\u53e3", "hijouguchi", "emergency exit", listOf("emergency exit", "main entrance", "elevator", "stairs")),
+                VocabSeed("\u304a\u624b\u6d17\u3044", "otearai", "restroom", listOf("restroom", "kitchen", "office", "exit")),
+                VocabSeed("\u53d7\u4ed8", "uketsuke", "reception", listOf("reception", "exit", "elevator", "stairs")),
+                VocabSeed("\u7acb\u5165\u7981\u6b62", "tachiiri kinshi", "no entry", listOf("no entry", "free entry", "staff only", "members only")),
+                VocabSeed("\u95a2\u4fc2\u8005\u4ee5\u5916", "kankeisha igai", "unauthorized persons", listOf("unauthorized persons", "all visitors", "customers only", "members welcome")),
+                VocabSeed("\u53f3", "migi", "right", listOf("right", "left", "up", "down")),
+                VocabSeed("\u5de6", "hidari", "left", listOf("left", "right", "up", "straight")),
+                VocabSeed("\u5730\u4e0b", "chika", "basement", listOf("basement", "rooftop", "first floor", "elevator")),
+                VocabSeed("\u7537\u6027", "dansei", "men's", listOf("men's", "women's", "children's", "unisex")),
+                VocabSeed("\u5973\u6027", "josei", "women's", listOf("women's", "men's", "children's", "unisex")),
+                VocabSeed("\u6545\u969c\u4e2d", "koshoochuu", "out of order", listOf("out of order", "in use", "available", "under repair")),
+                VocabSeed("\u7121\u6599", "muryou", "free of charge", listOf("free of charge", "paid", "half price", "sold out")),
+                VocabSeed("\u6709\u6599", "yuuryou", "paid", listOf("paid", "free", "half price", "discount")),
+                VocabSeed("\u99d0\u8eca\u5834", "chuushajou", "parking lot", listOf("parking lot", "bus stop", "train station", "taxi stand")),
+                VocabSeed("\u559c\u7159\u6240", "kitsuenjo", "smoking area", listOf("smoking area", "no smoking", "rest area", "exit")),
+                VocabSeed("\u6848\u5185", "annai", "information/guide", listOf("information/guide", "exit", "entrance", "caution")),
+                VocabSeed("\u30a8\u30ec\u30d9\u30fc\u30bf\u30fc", "erebeetaa", "elevator", listOf("elevator", "escalator", "stairs", "exit")),
+                VocabSeed("\u5e8a\u304c\u6ed1\u308a\u307e\u3059", "yuka ga suberimasu", "slippery floor", listOf("slippery floor", "wet paint", "out of order", "no entry")),
+                VocabSeed("\u9589\u5e97", "heiten", "closed (shop)", listOf("closed (shop)", "open", "preparing", "sold out")),
+                VocabSeed("\u4f7f\u7528\u4e2d", "shiyouchuu", "in use/occupied", listOf("in use/occupied", "available", "out of order", "closed")),
+                VocabSeed("\u7a7a\u5e2d", "kuuseki", "vacant seat", listOf("vacant seat", "full", "reserved", "no entry")),
+                VocabSeed("\u6e80\u5e2d", "manseki", "full (no seats)", listOf("full (no seats)", "available", "reserved", "half empty")),
+                VocabSeed("\u6771\u53e3", "higashiguchi", "east exit", listOf("east exit", "west exit", "north exit", "south exit")),
+                VocabSeed("\u897f\u53e3", "nishiguchi", "west exit", listOf("west exit", "east exit", "south exit", "north exit")),
+                VocabSeed("\u5317\u53e3", "kitaguchi", "north exit", listOf("north exit", "south exit", "east exit", "west exit")),
+                VocabSeed("\u5357\u53e3", "minamiguchi", "south exit", listOf("south exit", "north exit", "west exit", "east exit")),
+                VocabSeed("\u9589\u307e\u308b", "shimaru", "to close (door)", listOf("to close (door)", "to open", "to push", "to pull"))
+            )
+        )
+    }
+
+    private fun buildAdultingTrack(): TrackSeed {
+        return buildSimpleThemeTrack(
+            trackId = "adulting_core",
+            title = "Mail & Adulting",
+            description = "Delivery slips, forms, receipts, and fees. Adulting in Japanese.",
+            accentColor = "#7A6B5D",
+            displayOrder = 13,
+            levelTitles = listOf(
+                "Delivery Basics",
+                "Forms & Addresses",
+                "Receipts & Fees",
+                "Deadlines & Submissions",
+                "Office & Reception",
+                "Banking Basics",
+                "Utilities & Bills",
+                "Paperwork Pro"
+            ),
+            kanjiPool = listOf(
+                KanjiSeed("\u5c4a", "deliver"),
+                KanjiSeed("\u914d", "distribute"),
+                KanjiSeed("\u5728", "exist/be at"),
+                KanjiSeed("\u4f4f", "live"),
+                KanjiSeed("\u6240", "place"),
+                KanjiSeed("\u540d", "name"),
+                KanjiSeed("\u9818", "receipt/territory"),
+                KanjiSeed("\u53ce", "collect"),
+                KanjiSeed("\u624b", "hand"),
+                KanjiSeed("\u63d0", "present/submit"),
+                KanjiSeed("\u7de0", "close/tighten"),
+                KanjiSeed("\u53d7", "receive"),
+                KanjiSeed("\u4ed8", "attach"),
+                KanjiSeed("\u7a93", "window"),
+                KanjiSeed("\u9001", "send"),
+                KanjiSeed("\u8fd4", "return"),
+                KanjiSeed("\u6255", "pay"),
+                KanjiSeed("\u7533", "apply"),
+                KanjiSeed("\u53f7", "number"),
+                KanjiSeed("\u5951", "contract"),
+                KanjiSeed("\u4fdd", "protect/insure"),
+                KanjiSeed("\u967a", "danger/risk"),
+                KanjiSeed("\u5bb6", "house"),
+                KanjiSeed("\u8cac", "duty/fee")
+            ),
+            vocabPool = listOf(
+                VocabSeed("\u4e0d\u5728\u7968", "fuzaihyou", "missed delivery slip", listOf("missed delivery slip", "receipt", "invoice", "ticket")),
+                VocabSeed("\u518d\u914d\u9054", "saihaitatsu", "redelivery", listOf("redelivery", "return", "cancellation", "refund")),
+                VocabSeed("\u4f4f\u6240", "juusho", "address", listOf("address", "name", "phone number", "email")),
+                VocabSeed("\u6c0f\u540d", "shimei", "full name", listOf("full name", "address", "phone", "signature")),
+                VocabSeed("\u9818\u53ce\u66f8", "ryoushuusho", "receipt", listOf("receipt", "invoice", "ticket", "contract")),
+                VocabSeed("\u624b\u6570\u6599", "tesuuryou", "handling fee", listOf("handling fee", "discount", "tax", "tip")),
+                VocabSeed("\u63d0\u51fa", "teishutsu", "submission", listOf("submission", "receipt", "cancellation", "delivery")),
+                VocabSeed("\u7de0\u5207", "shimekiri", "deadline", listOf("deadline", "start date", "holiday", "payday")),
+                VocabSeed("\u53d7\u4ed8", "uketsuke", "reception desk", listOf("reception desk", "exit", "waiting room", "restroom")),
+                VocabSeed("\u7a93\u53e3", "madoguchi", "service counter", listOf("service counter", "entrance", "exit", "ATM")),
+                VocabSeed("\u8a18\u5165", "kinyuu", "fill in (a form)", listOf("fill in (a form)", "submit", "cancel", "sign")),
+                VocabSeed("\u5370\u9451", "inkan", "personal seal", listOf("personal seal", "signature", "stamp", "ID card")),
+                VocabSeed("\u66f8\u985e", "shorui", "documents", listOf("documents", "receipt", "money", "ticket")),
+                VocabSeed("\u632f\u8fbc", "furikomi", "bank transfer", listOf("bank transfer", "cash payment", "credit card", "refund")),
+                VocabSeed("\u8acb\u6c42\u66f8", "seikyuusho", "invoice", listOf("invoice", "receipt", "contract", "delivery slip")),
+                VocabSeed("\u53e3\u5ea7", "kouza", "bank account", listOf("bank account", "credit card", "cash", "savings")),
+                VocabSeed("\u6697\u8a3c\u756a\u53f7", "anshou bangou", "PIN number", listOf("PIN number", "phone number", "address", "account number")),
+                VocabSeed("\u7533\u8fbc", "moushikomi", "application", listOf("application", "cancellation", "receipt", "invoice")),
+                VocabSeed("\u5951\u7d04", "keiyaku", "contract", listOf("contract", "receipt", "refund", "invoice")),
+                VocabSeed("\u66f4\u65b0", "koushin", "renewal", listOf("renewal", "cancellation", "new", "expired")),
+                VocabSeed("\u4fdd\u8a3c", "hoshou", "guarantee/warranty", listOf("guarantee/warranty", "refund", "exchange", "repair")),
+                VocabSeed("\u8eab\u5206\u8a3c\u660e\u66f8", "mibun shoumeisho", "ID card", listOf("ID card", "passport", "license", "receipt")),
+                VocabSeed("\u5f15\u843d", "hikiotoshi", "auto-deduction", listOf("auto-deduction", "cash payment", "transfer", "refund")),
+                VocabSeed("\u5149\u71b1\u8cbb", "kounetsuhi", "utility costs", listOf("utility costs", "rent", "insurance", "tax")),
+                VocabSeed("\u5bb6\u8cc3", "yachin", "rent", listOf("rent", "utilities", "deposit", "insurance")),
+                VocabSeed("\u6577\u91d1", "shikikin", "security deposit", listOf("security deposit", "rent", "key money", "brokerage fee")),
+                VocabSeed("\u4fdd\u967a", "hoken", "insurance", listOf("insurance", "warranty", "tax", "fee")),
+                VocabSeed("\u8fd4\u9001", "hensou", "return shipping", listOf("return shipping", "delivery", "pickup", "refund"))
             )
         )
     }
@@ -1229,12 +1600,49 @@ object GoalAlignedSeedContent {
         val packs = levelTitles.mapIndexed { index, levelTitle ->
             val level = index + 1
             val difficulty = (index + 2).coerceIn(2, 10)
-            val kanji = cyclicSlice(kanjiPool, start = index * 2, count = 3)
-            val vocab = cyclicSlice(vocabPool, start = index * 2, count = 2)
-            val choiceAnswer = listOf("desu", "masu", "ni", "de", "ka")[index % 5]
-            val clozeAnswer = listOf("shite", "mite", "itte", "kudasai", "onegai")[index % 5]
-            val firstTermRuby = furiganaTokenForVocab(vocab[0])
-            val secondTermRuby = furiganaTokenForVocab(vocab[1])
+            val kanji = cyclicSlice(kanjiPool, start = index * 3, count = 5)
+            val vocab = cyclicSlice(vocabPool, start = index * 3, count = 4)
+            // Rotate grammar patterns across packs for variety
+            val gv = vocab[index % vocab.size]               // grammar vocab
+            val sv = vocab[(index + 2) % vocab.size]         // sentence vocab
+            val gvRuby = furiganaTokenForVocab(gv)
+            val svRuby = furiganaTokenForVocab(sv)
+            data class GFrame(val prompt: String, val furigana: String, val answer: String,
+                              val choices: List<String>)
+            val grammarFrames = listOf(
+                GFrame("${gv.reading} wa doko ( ) arimasu ka.",
+                    "${gvRuby}はどこ（　）ありますか。", "ni",
+                    listOf("ni", "de", "to", "e", "ka")),
+                GFrame("${gv.reading} ga ( ) desu.",
+                    "${gvRuby}が（　）です。", "hoshii",
+                    listOf("hoshii", "kirai", "jouzu", "suki", "dame")),
+                GFrame("${gv.reading} o misete ( ).",
+                    "${gvRuby}を見{み}せて（　）。", "kudasai",
+                    listOf("kudasai", "shimasu", "masu", "mashita", "desu")),
+                GFrame("${gv.reading} wa ikura ( ) ka.",
+                    "${gvRuby}はいくら（　）か。", "desu",
+                    listOf("desu", "masu", "da", "deshita", "mashita")),
+                GFrame("${gv.reading} to ${sv.reading} ( ) kudasai.",
+                    "${gvRuby}と${svRuby}（　）ください。", "o",
+                    listOf("o", "ga", "wa", "ni", "de")),
+                GFrame("${gv.reading} wa ${sv.reading} ( ) ii desu.",
+                    "${gvRuby}は${svRuby}（　）いいです。", "yori",
+                    listOf("yori", "to", "de", "ni", "ka")),
+                GFrame("${gv.reading} o ( ) mo ii desu ka.",
+                    "${gvRuby}を（　）もいいですか。", "tsukatte",
+                    listOf("tsukatte", "tabete", "nonde", "mite", "kaite")),
+                GFrame("${gv.reading} wa ( ) desu ka.",
+                    "${gvRuby}は（　）ですか。", "dou",
+                    listOf("dou", "nani", "dare", "itsu", "doko"))
+            )
+            val gf = grammarFrames[index % grammarFrames.size]
+            val clozeAnswers = listOf("kudasai", "onegai shimasu", "shite", "mite", "itte",
+                "tabete", "kaite", "tsukatte")
+            val clozeAns = clozeAnswers[index % clozeAnswers.size]
+            val v0Ruby = furiganaTokenForVocab(vocab[0])
+            val v1Ruby = furiganaTokenForVocab(vocab[1])
+            val v2Ruby = furiganaTokenForVocab(vocab[2])
+            val v3Ruby = furiganaTokenForVocab(vocab[3])
             val sentenceBuildJapanese = "${vocab[0].term}と${vocab[1].term}をお願いします"
             PackSeed(
                 level = level,
@@ -1246,25 +1654,25 @@ object GoalAlignedSeedContent {
                     kanji = kanji,
                     vocab = vocab,
                     grammarChoice = GrammarSeed(
-                        prompt = "${vocab[0].reading} wa benri ( ).",
-                        promptFurigana = "${firstTermRuby}は便利{べんり}（　）。",
-                        answer = choiceAnswer,
-                        choices = listOf("desu", "masu", "ni", "de", "ka"),
+                        prompt = gf.prompt,
+                        promptFurigana = gf.furigana,
+                        answer = gf.answer,
+                        choices = gf.choices,
                         meaning = "$title grammar pattern"
                     ),
                     grammarCloze = ClozeSeed(
-                        prompt = "${vocab[0].reading} o ( ____ ) kudasai.",
-                        promptFurigana = "${firstTermRuby}を（　）ください。",
-                        answer = clozeAnswer,
-                        accepted = listOf(clozeAnswer),
+                        prompt = "${vocab[2].reading} o ( ____ ).",
+                        promptFurigana = "${v2Ruby}を（　）。",
+                        answer = clozeAns,
+                        accepted = listOf(clozeAns),
                         meaning = "$title request pattern"
                     ),
                     sentence = SentenceSeed(
-                        prompt = "${vocab[0].reading} to ${vocab[1].reading} ga hitsuyou desu.",
-                        promptFurigana = "${firstTermRuby}と${secondTermRuby}が必要{ひつよう}です。",
-                        answer = "$levelTitle uses ${vocab[0].meaning} and ${vocab[1].meaning}.",
+                        prompt = "${vocab[2].reading} to ${vocab[3].reading} ga hitsuyou desu.",
+                        promptFurigana = "${v2Ruby}と${v3Ruby}が必要{ひつよう}です。",
+                        answer = "$levelTitle uses ${vocab[2].meaning} and ${vocab[3].meaning}.",
                         choices = listOf(
-                            "$levelTitle uses ${vocab[0].meaning} and ${vocab[1].meaning}.",
+                            "$levelTitle uses ${vocab[2].meaning} and ${vocab[3].meaning}.",
                             "$levelTitle avoids both terms completely.",
                             "$levelTitle focuses only on grammar drills.",
                             "$levelTitle is unrelated to this theme."
@@ -1338,8 +1746,10 @@ object GoalAlignedSeedContent {
         }
         // KANJI_MEANING — all levels (meaning recognition, easiest entry point)
         if (kanji.isNotEmpty()) {
+            val vocabMeanings = vocab.map { it.meaning.trim() }.toSet()
             val meaningPool = (kanji.map { it.meaning } + vocab.map { it.meaning.trim() }).distinct()
-            cards += kanji.mapIndexed { index, seed ->
+            cards += kanji.mapIndexedNotNull { index, seed ->
+                if (seed.meaning in vocabMeanings) return@mapIndexedNotNull null
                 val cardId = "${trackId}_m_${level}_${index + 1}"
                 val answer = seed.meaning
                 val distractors = meaningPool
@@ -1724,6 +2134,168 @@ object GoalAlignedSeedContent {
         "\u6a21" to 14,
         "\u99c5" to 14,
         "\u65c5" to 10,
-        "\u7d04" to 9
+        "\u7d04" to 9,
+        // Food & Ordering
+        "\u725b" to 4,
+        "\u8c5a" to 11,
+        "\u9d8f" to 14,
+        "\u76db" to 11,
+        "\u6301" to 9,
+        "\u58f2" to 7,
+        "\u5207" to 4,
+        "\u5e2d" to 10,
+        "\u7159" to 13,
+        "\u5b9a" to 8,
+        "\u9aa8" to 10,
+        // Transport
+        "\u51fa" to 5,
+        "\u5165" to 2,
+        "\u53e3" to 3,
+        "\u6025" to 9,
+        "\u5404" to 6,
+        "\u4e57" to 9,
+        "\u63db" to 12,
+        "\u904b" to 12,
+        "\u8ee2" to 11,
+        "\u7d42" to 11,
+        "\u512a" to 17,
+        "\u5148" to 6,
+        // Konbini
+        "\u7cd6" to 16,
+        "\u7518" to 5,
+        "\u8f9b" to 7,
+        "\u6e29" to 12,
+        "\u888b" to 11,
+        "\u534a" to 5,
+        "\u984d" to 18,
+        "\u9650" to 9,
+        "\u671f" to 12,
+        "\u9593" to 12,
+        "\u65b0" to 13,
+        "\u5546" to 11,
+        "\u54c1" to 9,
+        "\u8cde" to 15,
+        // Signs
+        "\u62bc" to 8,
+        "\u5f15" to 4,
+        "\u958b" to 12,
+        "\u55b6" to 12,
+        "\u696d" to 13,
+        "\u4f11" to 6,
+        "\u7981" to 13,
+        "\u6b62" to 4,
+        "\u6ce8" to 8,
+        "\u5de5" to 3,
+        "\u4e8b" to 8,
+        "\u975e" to 8,
+        "\u5e38" to 11,
+        "\u7acb" to 5,
+        // Adulting
+        "\u5c4a" to 8,
+        "\u914d" to 10,
+        "\u5728" to 6,
+        "\u4f4f" to 7,
+        "\u6240" to 8,
+        "\u540d" to 6,
+        "\u9818" to 14,
+        "\u53ce" to 4,
+        "\u624b" to 4,
+        "\u63d0" to 12,
+        "\u7de0" to 15,
+        "\u53d7" to 8,
+        "\u4ed8" to 5,
+        "\u7a93" to 11,
+        // Food (new)
+        "\u9b5a" to 11,  // 魚 fish
+        "\u91ce" to 11,  // 野 field
+        "\u83dc" to 11,  // 菜 vegetable
+        "\u9eba" to 16,  // 麺 noodle
+        "\u4e3c" to 5,   // 丼 rice bowl
+        "\u5473" to 8,   // 味 flavor
+        "\u4e88" to 4,   // 予 advance
+        "\u7c73" to 6,   // 米 rice
+        "\u6c34" to 4,   // 水 water
+        // Transport (new)
+        "\u5317" to 5,   // 北 north
+        "\u5357" to 9,   // 南 south
+        "\u6771" to 8,   // 東 east
+        "\u897f" to 6,   // 西 west
+        "\u756a" to 12,  // 番 number
+        "\u7dda" to 15,  // 線 line
+        "\u767a" to 9,   // 発 depart
+        "\u7740" to 12,  // 着 arrive
+        "\u7247" to 4,   // 片 one-way
+        "\u8fd4" to 7,   // 返 return
+        // Konbini (new)
+        "\u51b7" to 7,   // 冷 cold
+        "\u71b1" to 15,  // 熱 hot
+        "\u5869" to 13,  // 塩 salt
+        "\u5375" to 7,   // 卵 egg
+        "\u4e73" to 8,   // 乳 milk
+        "\u7a0e" to 12,  // 税 tax
+        "\u5186" to 4,   // 円 yen
+        "\u8336" to 9,   // 茶 tea
+        "\u5f01" to 5,   // 弁 lunch box
+        "\u5f53" to 6,   // 当 this
+        // Signs (new)
+        "\u53f3" to 5,   // 右 right
+        "\u5de6" to 5,   // 左 left
+        "\u4e0a" to 3,   // 上 up
+        "\u4e0b" to 3,   // 下 down
+        "\u968e" to 12,  // 階 floor
+        "\u7537" to 7,   // 男 man
+        "\u5973" to 3,   // 女 woman
+        "\u7121" to 12,  // 無 none
+        "\u6709" to 6,   // 有 have
+        "\u6545" to 9,   // 故 breakdown
+        // Adulting (new)
+        "\u9001" to 9,   // 送 send
+        "\u6255" to 5,   // 払 pay
+        "\u7533" to 5,   // 申 apply
+        "\u53f7" to 5,   // 号 number
+        "\u5951" to 9,   // 契 contract
+        "\u4fdd" to 9,   // 保 insure
+        "\u96aa" to 11,  // 険 risk
+        "\u5bb6" to 10,  // 家 house
+        "\u8cac" to 11,  // 責 fee
+        // Shopping (new)
+        "\u8272" to 6,   // 色 color
+        "\u91cd" to 9,   // 重 heavy
+        "\u8efd" to 12,  // 軽 light
+        "\u53e4" to 5,   // 古 old
+        "\u7a7a" to 8,   // 空 empty
+        "\u5305" to 5,   // 包 wrap
+        "\u9078" to 15,  // 選 choose
+        "\u63a2" to 11,  // 探 search
+        // Signs (new batch 2)
+        "\u9589" to 11,  // 閉 close
+        "\u4e2d" to 4,   // 中 middle
+        "\u6e80" to 12,  // 満 full
+        // Shopping (new batch 2)
+        "\u5343" to 3,   // 千 thousand
+        "\u767e" to 6,   // 百 hundred
+        "\u4e07" to 3,   // 万 ten thousand
+        "\u5927" to 3,   // 大 big
+        "\u5c0f" to 3,   // 小 small
+        "\u591a" to 6,   // 多 many
+        "\u5c11" to 4,   // 少 few
+        // Food (new batch 2)
+        "\u8089" to 6,   // 肉 meat
+        // Transport (new batch 2)
+        "\u9580" to 8,   // 門 gate
+        "\u884c" to 6,   // 行 go
+        "\u6765" to 7,   // 来 come
+        "\u96fb" to 13,  // 電 electric
+        // Daily Life (new)
+        "\u6708" to 4,   // 月 moon/month
+        "\u706b" to 4,   // 火 fire
+        "\u91d1" to 8,   // 金 gold/money
+        "\u4eca" to 4,   // 今 now
+        "\u524d" to 9,   // 前 before
+        "\u898b" to 7,   // 見 see
+        "\u50cd" to 13,  // 働 work
+        "\u8cb7" to 12,  // 買 buy
+        "\u4f1a" to 6,   // 会 meet
+        "\u5b66" to 8    // 学 study
     )
 }

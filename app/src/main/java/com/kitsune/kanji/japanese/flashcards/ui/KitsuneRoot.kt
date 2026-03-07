@@ -60,6 +60,8 @@ import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportScreen
 import com.kitsune.kanji.japanese.flashcards.ui.report.DeckReportViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.settings.SettingsTabScreen
 import com.kitsune.kanji.japanese.flashcards.ui.settings.SettingsTabViewModel
+import com.kitsune.kanji.japanese.flashcards.ui.capture.CaptureScreen
+import com.kitsune.kanji.japanese.flashcards.ui.capture.CaptureViewModel
 import com.kitsune.kanji.japanese.flashcards.ui.theme.KitsuneTheme
 import kotlinx.coroutines.launch
 
@@ -71,6 +73,8 @@ private const val routeProfile = "profile"
 private const val routeSettings = "settings"
 private const val routeDeck = "deck"
 private const val routeDeckReport = "deck_report"
+private const val routeCapture = "capture"
+private const val routeCaptureHistory = "capture_history"
 
 private data class TabItem(
     val route: String,
@@ -80,7 +84,7 @@ private data class TabItem(
 )
 
 @Composable
-fun KitsuneRoot() {
+fun KitsuneRoot(deepLinkThemeId: String? = null) {
     KitsuneTheme(darkTheme = false) {
         val context = LocalContext.current.applicationContext as KitsuneApp
         val appContainer = context.appContainer
@@ -242,6 +246,16 @@ fun KitsuneRoot() {
                         }
                     }
 
+                    // Apply deep link theme selection
+                    LaunchedEffect(deepLinkThemeId) {
+                        if (deepLinkThemeId != null) {
+                            val theme = deckThemeCatalog.firstOrNull { it.id == deepLinkThemeId }
+                            if (theme != null) {
+                                viewModel.onThemeSelected(theme)
+                            }
+                        }
+                    }
+
                     LearnScreen(
                         state = state,
                         onStartDailyDeck = viewModel::startDailyDeck,
@@ -254,7 +268,9 @@ fun KitsuneRoot() {
                         },
                         onThemeSelected = viewModel::onThemeSelected,
                         onRefresh = viewModel::refreshHome,
-                        onProfileClick = { navController.navigate(routeProfile) }
+                        onProfileClick = { navController.navigate(routeProfile) },
+                        onOpenCapture = { navController.navigate(routeCapture) },
+                        onOpenCaptureHistory = { navController.navigate(routeCaptureHistory) }
                     )
                 }
 
@@ -334,6 +350,47 @@ fun KitsuneRoot() {
                             }
                         },
                         onOpenUpgrade = { navController.navigate("$routePaywall?trial=false") }
+                    )
+                }
+
+                // --- Pushed: Capture (camera) ---
+                composable(routeCapture) {
+                    val viewModel: CaptureViewModel = viewModel(
+                        factory = CaptureViewModel.factory(
+                            repository = appContainer.repository,
+                            cacheDir = context.cacheDir
+                        )
+                    )
+                    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                    CaptureScreen(
+                        state = state,
+                        onCapture = viewModel::processImage,
+                        onToggleTerm = viewModel::toggleTerm,
+                        onSaveSelected = viewModel::saveSelectedTerms,
+                        onReset = viewModel::resetToCamera,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+
+                // --- Pushed: Capture (history review) ---
+                composable(routeCaptureHistory) {
+                    val viewModel: CaptureViewModel = viewModel(
+                        factory = CaptureViewModel.factory(
+                            repository = appContainer.repository,
+                            cacheDir = context.cacheDir,
+                            startInHistory = true
+                        )
+                    )
+                    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+                    CaptureScreen(
+                        state = state,
+                        onCapture = viewModel::processImage,
+                        onToggleTerm = viewModel::toggleTerm,
+                        onSaveSelected = viewModel::saveSelectedTerms,
+                        onReset = viewModel::resetToCamera,
+                        onToggleCardInDaily = viewModel::toggleCardInDaily,
+                        onDeleteCard = viewModel::deleteCard,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 

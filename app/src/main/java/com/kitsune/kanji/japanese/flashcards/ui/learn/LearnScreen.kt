@@ -23,6 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CollectionsBookmark
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -33,13 +37,17 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +57,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
@@ -70,7 +79,9 @@ fun LearnScreen(
     onStartExamPack: (String) -> Unit,
     onThemeSelected: (DeckThemeOption) -> Unit,
     onRefresh: () -> Unit,
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onOpenCapture: () -> Unit = {},
+    onOpenCaptureHistory: () -> Unit = {}
 ) {
     val themes = state.availableThemes
 
@@ -191,6 +202,53 @@ fun LearnScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Expandable capture FAB (camera + review history)
+        var fabExpanded by remember { mutableStateOf(false) }
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 20.dp),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (fabExpanded) {
+                FloatingActionButton(
+                    onClick = { fabExpanded = false; onOpenCapture() },
+                    containerColor = Color.White,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .border(1.dp, BorderLight, CircleShape)
+                ) {
+                    Icon(Icons.Filled.CameraAlt, "Capture Japanese", tint = AccentOrange)
+                }
+                FloatingActionButton(
+                    onClick = { fabExpanded = false; onOpenCaptureHistory() },
+                    containerColor = Color.White,
+                    shape = CircleShape,
+                    elevation = FloatingActionButtonDefaults.elevation(2.dp, 2.dp, 2.dp, 2.dp),
+                    modifier = Modifier
+                        .size(48.dp)
+                        .border(1.dp, BorderLight, CircleShape)
+                ) {
+                    Icon(Icons.Filled.CollectionsBookmark, "Review saved cards", tint = AccentOrange)
+                }
+            }
+            FloatingActionButton(
+                onClick = { fabExpanded = !fabExpanded },
+                modifier = Modifier.size(56.dp),
+                containerColor = AccentOrange,
+                shape = CircleShape
+            ) {
+                Icon(
+                    if (fabExpanded) Icons.Filled.Close else Icons.Filled.CameraAlt,
+                    contentDescription = if (fabExpanded) "Close" else "Capture menu",
+                    tint = Color.White
+                )
             }
         }
 
@@ -494,6 +552,15 @@ private fun DeckCategoryCard(
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
+                    val heroPreview = heroTermsFor(theme.id)
+                    if (heroPreview != null) {
+                        Text(
+                            text = heroPreview,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color.White.copy(alpha = 0.6f),
+                            letterSpacing = 4.sp
+                        )
+                    }
                     Text(
                         text = "${theme.difficulty} · ${theme.levels.size} Levels",
                         style = MaterialTheme.typography.labelMedium,
@@ -701,4 +768,14 @@ private fun PackPlaceholderRow(levelName: String, accent: Color) {
             .height(0.5.dp)
             .background(BorderLight)
     )
+}
+
+private fun heroTermsFor(themeId: String): String? = when (themeId) {
+    "konbini" -> "\u7121\u7cd6 \u534a\u984d \u671f\u9593\u9650\u5b9a"
+    "food" -> "\u725b \u8c5a \u9d8f \u5927\u76db \u6301\u3061\u5e30\u308a"
+    "transport" -> "\u51fa\u53e3 \u6025\u884c \u4e57\u63db \u6700\u7d42"
+    "signs" -> "\u62bc\u3059 \u5f15\u304f \u55b6\u696d\u4e2d \u7981\u6b62"
+    "adulting" -> "\u4e0d\u5728\u7968 \u518d\u914d\u9054 \u9818\u53ce\u66f8"
+    "shopping" -> "\u5272\u5f15 \u30ec\u30b8 \u9818\u53ce\u66f8 \u30bb\u30fc\u30eb"
+    else -> null
 }

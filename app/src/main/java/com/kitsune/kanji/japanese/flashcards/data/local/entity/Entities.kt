@@ -154,3 +154,40 @@ data class TrackAbilityEntity(
     val sampleCount: Int,
     val lastUpdatedEpochMillis: Long
 )
+
+// ── Photo Capture Entities ──
+
+enum class CaptureStatus {
+    PENDING,
+    RESOLVED,
+    FAILED
+}
+
+@Entity(tableName = "captured_media")
+data class CapturedMediaEntity(
+    @PrimaryKey val mediaId: String,
+    val localUri: String,
+    val capturedAtEpochMillis: Long,
+    val ocrText: String?,
+    val status: CaptureStatus
+)
+
+@Entity(tableName = "captured_terms")
+data class CapturedTermEntity(
+    @PrimaryKey val termId: String,
+    val mediaId: String,
+    val kanji: String,
+    val kana: String,
+    val meaning: String,
+    val cropRect: String?,
+    val confidence: Float,
+    val source: String
+)
+
+@Entity(tableName = "captured_cards")
+data class CapturedCardEntity(
+    @PrimaryKey val cardId: String,
+    val termId: String,
+    val createdAtEpochMillis: Long,
+    val includeInDaily: Boolean
+)

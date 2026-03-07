@@ -8,8 +8,12 @@ import com.kitsune.kanji.japanese.flashcards.data.local.KitsuneDatabase
 import com.kitsune.kanji.japanese.flashcards.data.local.LearnerLevel
 import com.kitsune.kanji.japanese.flashcards.data.local.OnboardingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.PowerUpPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.dao.CapturedHistoryRow
 import com.kitsune.kanji.japanese.flashcards.data.local.dao.KitsuneDao
 import com.kitsune.kanji.japanese.flashcards.data.local.dao.RetestAttemptContextRow
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedCardEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedMediaEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedTermEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
@@ -77,6 +81,17 @@ interface KitsuneRepository {
     suspend fun getKanjiAttemptHistory(limit: Int): List<KanjiAttemptHistoryItem>
     suspend fun getDeckRunHistory(limit: Int): List<DeckRunHistoryItem>
     suspend fun createRetestDeckForAttempt(attemptId: String): DeckSession
+
+    // Photo capture
+    suspend fun saveCapturedMedia(media: CapturedMediaEntity)
+    suspend fun saveCapturedTerms(terms: List<CapturedTermEntity>)
+    suspend fun saveCard(card: CardEntity)
+    suspend fun saveCapturedCard(capturedCard: CapturedCardEntity)
+    suspend fun getDailyCapturedTerms(): List<CapturedTermEntity>
+    suspend fun getDailyCapturedCards(): List<CapturedCardEntity>
+    suspend fun getCapturedHistory(): List<CapturedHistoryRow>
+    suspend fun setCapturedCardInDaily(cardId: String, include: Boolean)
+    suspend fun deleteCapturedCard(cardId: String)
 }
 
 class KitsuneRepositoryImpl(
@@ -331,6 +346,8 @@ class KitsuneRepositoryImpl(
         )
         val attemptedIds = dao.getAttemptedCardIdsForTrack(trackId = track.trackId).toSet()
         val newCards = unlockedCards.filter { it.cardId !in attemptedIds }
+        val capturedCardIds = dao.getDailyCapturedCards().map { it.cardId }
+        val capturedCards = if (capturedCardIds.isNotEmpty()) dao.getCardsByIds(capturedCardIds) else emptyList()
         val chosenCards = pickDailyCards(
             today = today,
             unlockedCards = unlockedCards,
@@ -340,6 +357,7 @@ class KitsuneRepositoryImpl(
             crossTrackCards = crossTrackCards,
             preferredTopicCardsByTrack = preferredTopicCardsByTrack,
             dailySeedCards = dailySeedCards,
+            capturedCards = capturedCards,
             abilityState = abilityState,
             dueCount = dueCount
         )
@@ -970,6 +988,7 @@ class KitsuneRepositoryImpl(
         crossTrackCards: List<CardEntity>,
         preferredTopicCardsByTrack: Map<String, List<CardEntity>>,
         dailySeedCards: List<CardEntity>,
+        capturedCards: List<CardEntity>,
         abilityState: TrackAbilityEntity,
         dueCount: Int
     ): List<CardEntity> {
@@ -1066,6 +1085,13 @@ class KitsuneRepositoryImpl(
             quota = crossTrackQuota,
             targetSize = targetSize
         )
+        val capturedQuota = capturedCards.size.coerceAtMost(3)
+        appendCards(
+            selected = selected,
+            cards = capturedCards.shuffled(random),
+            quota = capturedQuota,
+            targetSize = targetSize
+        )
         appendCards(
             selected = selected,
             cards = challengeCandidates.shuffled(random),
@@ -1145,12 +1171,12 @@ class KitsuneRepositoryImpl(
             }
         val goalTracks = when (goal) {
             EducationalGoal.CASUAL -> when (learnerLevel) {
-                LearnerLevel.PRE_N5 -> listOf("foundations", "conversation")
-                else -> listOf("conversation", "school", "work")
+                LearnerLevel.PRE_N5 -> listOf("foundations", "konbini_core", "signs_core", "conversation")
+                else -> listOf("konbini_core", "food_core", "signs_core", "transport_core", "conversation")
             }
             EducationalGoal.EVERYDAY_USE -> when (learnerLevel) {
-                LearnerLevel.PRE_N5 -> listOf("foundations", "conversation", "daily_life_core")
-                else -> listOf("conversation", "school", "work", N5SeedContent.trackId)
+                LearnerLevel.PRE_N5 -> listOf("foundations", "konbini_core", "signs_core", "daily_life_core")
+                else -> listOf("konbini_core", "food_core", "transport_core", "signs_core", "adulting_core")
             }
             EducationalGoal.SCHOOL_OR_WORK -> when (learnerLevel) {
                 LearnerLevel.PRE_N5 -> listOf("foundations", "school", "conversation")
@@ -1489,6 +1515,44 @@ class KitsuneRepositoryImpl(
         val dailySeedTrackIds: List<String>,
         val reinforcementTrackIds: List<String>
     )
+
+    // ── Photo Capture ──
+
+    override suspend fun saveCapturedMedia(media: CapturedMediaEntity) {
+        dao.insertCapturedMedia(media)
+    }
+
+    override suspend fun saveCapturedTerms(terms: List<CapturedTermEntity>) {
+        dao.insertCapturedTerms(terms)
+    }
+
+    override suspend fun saveCard(card: CardEntity) {
+        dao.insertCards(listOf(card))
+    }
+
+    override suspend fun saveCapturedCard(capturedCard: CapturedCardEntity) {
+        dao.insertCapturedCard(capturedCard)
+    }
+
+    override suspend fun getDailyCapturedTerms(): List<CapturedTermEntity> {
+        return dao.getDailyCapturedTerms()
+    }
+
+    override suspend fun getDailyCapturedCards(): List<CapturedCardEntity> {
+        return dao.getDailyCapturedCards()
+    }
+
+    override suspend fun getCapturedHistory(): List<CapturedHistoryRow> {
+        return dao.getAllCapturedHistory()
+    }
+
+    override suspend fun setCapturedCardInDaily(cardId: String, include: Boolean) {
+        dao.updateCapturedCardDailyInclusion(cardId, include)
+    }
+
+    override suspend fun deleteCapturedCard(cardId: String) {
+        dao.deleteCapturedCard(cardId)
+    }
 
     companion object {
         private const val MAX_STRENGTH = 8

@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -12,13 +13,15 @@ android {
         applicationId = "com.kitsune.kanji.japanese.flashcards"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
+        versionCode = 7
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Set to true after AdMob is approved and you want to show ads + Remove Ads IAP
         buildConfigField("Boolean", "ENABLE_ADS", "false")
+        // Photo analysis: set to your backend URL (e.g. from SAM deploy output AnalyzeJapaneseUrl)
+        buildConfigField("String", "CAPTURE_BACKEND_URL", "\"https://sepqvk8erg.execute-api.us-east-2.amazonaws.com/analyze-japanese\"")
     }
 
     buildTypes {
@@ -63,6 +66,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.google.billing.ktx)
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    implementation("androidx.camera:camera-core:1.4.1")
+    implementation("androidx.camera:camera-camera2:1.4.1")
+    implementation("androidx.camera:camera-lifecycle:1.4.1")
+    implementation("androidx.camera:camera-view:1.4.1")
 
     ksp(libs.androidx.room.compiler)
 

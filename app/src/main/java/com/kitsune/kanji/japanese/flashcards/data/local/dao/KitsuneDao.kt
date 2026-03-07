@@ -4,6 +4,9 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedCardEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedMediaEntity
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CapturedTermEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardAttemptEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardEntity
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
@@ -446,6 +449,68 @@ interface KitsuneDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTrackAbility(item: TrackAbilityEntity)
+
+    // ── Photo Capture ──
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCapturedMedia(item: CapturedMediaEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCapturedTerms(items: List<CapturedTermEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertCapturedCard(item: CapturedCardEntity)
+
+    @Query("SELECT * FROM captured_media ORDER BY capturedAtEpochMillis DESC")
+    suspend fun getAllCapturedMedia(): List<CapturedMediaEntity>
+
+    @Query("SELECT * FROM captured_terms WHERE mediaId = :mediaId")
+    suspend fun getCapturedTermsForMedia(mediaId: String): List<CapturedTermEntity>
+
+    @Query(
+        """
+        SELECT cc.* FROM captured_cards cc
+        WHERE cc.includeInDaily = 1
+        ORDER BY cc.createdAtEpochMillis DESC
+        """
+    )
+    suspend fun getDailyCapturedCards(): List<CapturedCardEntity>
+
+    @Query(
+        """
+        SELECT ct.* FROM captured_terms ct
+        INNER JOIN captured_cards cc ON cc.termId = ct.termId
+        WHERE cc.includeInDaily = 1
+        ORDER BY cc.createdAtEpochMillis DESC
+        """
+    )
+    suspend fun getDailyCapturedTerms(): List<CapturedTermEntity>
+
+    @Query("SELECT COUNT(*) FROM captured_cards")
+    suspend fun countCapturedCards(): Int
+
+    @Query("UPDATE captured_cards SET includeInDaily = :include WHERE cardId = :cardId")
+    suspend fun updateCapturedCardDailyInclusion(cardId: String, include: Boolean)
+
+    @Query("DELETE FROM captured_cards WHERE cardId = :cardId")
+    suspend fun deleteCapturedCard(cardId: String)
+
+    @Query("DELETE FROM captured_terms WHERE termId = :termId")
+    suspend fun deleteCapturedTerm(termId: String)
+
+    @Query("DELETE FROM captured_media WHERE mediaId = :mediaId")
+    suspend fun deleteCapturedMedia(mediaId: String)
+
+    @Query(
+        """
+        SELECT cc.cardId, ct.termId, ct.kanji, ct.kana, ct.meaning,
+               cc.includeInDaily, cc.createdAtEpochMillis
+        FROM captured_cards cc
+        INNER JOIN captured_terms ct ON cc.termId = ct.termId
+        ORDER BY cc.createdAtEpochMillis DESC
+        """
+    )
+    suspend fun getAllCapturedHistory(): List<CapturedHistoryRow>
 }
 
 data class DeckCardRow(
@@ -463,6 +528,16 @@ data class DeckCardRow(
     val choicesRaw: String?,
     val difficulty: Int,
     val templateId: String
+)
+
+data class CapturedHistoryRow(
+    val cardId: String,
+    val termId: String,
+    val kanji: String,
+    val kana: String?,
+    val meaning: String?,
+    val includeInDaily: Boolean,
+    val createdAtEpochMillis: Long
 )
 
 data class DifficultyScoreSnapshotRow(

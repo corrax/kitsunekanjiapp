@@ -1,0 +1,13 @@
+version = 0.1
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+stack_name = "kitsune-capture-backend"
+resolve_s3 = true
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+region = "us-east-1"
+parameter_overrides = "GeminiApiKey=\"replace-me\" AllowedOrigin=\"*\" DevicePerMinuteLimit=\"15\" DevicePerDayLimit=\"300\" IpPerMinuteLimit=\"60\" DeviceHardBlockThresholdPerMinute=\"120\" WafIpRateLimit5Min=\"2000\" EnableWafAssociation=\"false\""
