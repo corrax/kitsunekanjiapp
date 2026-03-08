@@ -363,8 +363,11 @@ class KitsuneRepositoryImpl(
         )
 
         val unlockedWriteLevels = getUnlockedWriteDifficulties(track.trackId)
+        val isBeginnerTrack = track.trackId.contains("n5") || track.trackId.contains("foundations")
+        val beginnerBlockedTypes = setOf(CardType.GRAMMAR_CLOZE_WRITE, CardType.SENTENCE_BUILD)
         val gatedCards = chosenCards.filter { card ->
-            card.type != CardType.KANJI_WRITE || card.difficulty in unlockedWriteLevels
+            (card.type != CardType.KANJI_WRITE || card.difficulty in unlockedWriteLevels) &&
+            (!isBeginnerTrack || card.type !in beginnerBlockedTypes)
         }
         val sequencedCards = applyCardTypeSequencing(gatedCards)
 
@@ -395,16 +398,20 @@ class KitsuneRepositoryImpl(
         }
 
         val unlockedWriteLevels = getUnlockedWriteDifficulties(pack.trackId)
+        val isBeginnerPack = pack.trackId.contains("n5") || pack.trackId.contains("foundations")
+        val beginnerBlockedTypes = setOf(CardType.GRAMMAR_CLOZE_WRITE, CardType.SENTENCE_BUILD)
         val meaningByDiffPos = rawCards
             .filter { it.type == CardType.KANJI_MEANING }
             .associateBy { it.difficulty to it.cardId.substringAfterLast("_") }
         val cards = rawCards.mapNotNull { card ->
-            if (card.type == CardType.KANJI_WRITE && card.difficulty !in unlockedWriteLevels) {
-                // Replace gated write card with its meaning equivalent
-                val posKey = card.cardId.substringAfterLast("_")
-                meaningByDiffPos[card.difficulty to posKey]
-            } else {
-                card
+            when {
+                card.type == CardType.KANJI_WRITE && card.difficulty !in unlockedWriteLevels -> {
+                    // Replace gated write card with its meaning equivalent
+                    val posKey = card.cardId.substringAfterLast("_")
+                    meaningByDiffPos[card.difficulty to posKey]
+                }
+                isBeginnerPack && card.type in beginnerBlockedTypes -> null
+                else -> card
             }
         }.distinctBy { it.cardId }
 
@@ -1085,7 +1092,7 @@ class KitsuneRepositoryImpl(
             quota = crossTrackQuota,
             targetSize = targetSize
         )
-        val capturedQuota = capturedCards.size.coerceAtMost(3)
+        val capturedQuota = capturedCards.size.coerceAtMost(6)
         appendCards(
             selected = selected,
             cards = capturedCards.shuffled(random),

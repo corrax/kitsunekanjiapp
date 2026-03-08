@@ -20,6 +20,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -264,6 +266,10 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
                     val activity = LocalContext.current as? Activity
 
+                    RefreshOnResume {
+                        viewModel.refreshHome()
+                    }
+
                     LaunchedEffect(Unit) {
                         viewModel.openDeckEvents.collect { deckRunId ->
                             navController.navigate("$routeDeck/$deckRunId")
@@ -339,6 +345,9 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                             captureQuotaPreferences = appContainer.captureQuotaPreferences
                         )
                     )
+                    RefreshOnResume {
+                        viewModel.load()
+                    }
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
                     ProfileTabScreen(
                         state = state,
@@ -536,6 +545,22 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun RefreshOnResume(onResume: () -> Unit) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, onResume) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                onResume()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 }

@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.entity.CardType
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -544,6 +545,13 @@ private fun ReviewPhase(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextMuted
                             )
+                            if (term.definition.isNotBlank()) {
+                                Text(
+                                    text = term.definition,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextMuted.copy(alpha = 0.75f)
+                                )
+                            }
                         }
                     }
                 }
@@ -735,6 +743,7 @@ private fun HistoryPhase(
                                     if (item.jlptLevel != "unknown") {
                                         JlptBadge(level = item.jlptLevel)
                                     }
+                                    CardTypeBadge(type = item.cardType)
                                 }
                                 if (item.kana.isNotBlank()) {
                                     Text(
@@ -748,6 +757,13 @@ private fun HistoryPhase(
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = TextMuted
                                 )
+                                if (item.definition.isNotBlank()) {
+                                    Text(
+                                        text = item.definition,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextMuted.copy(alpha = 0.75f)
+                                    )
+                                }
                             }
                             Switch(
                                 checked = item.includeInDaily,
@@ -800,6 +816,29 @@ private fun JlptBadge(level: String) {
             style = MaterialTheme.typography.labelSmall,
             color = fg,
             fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun CardTypeBadge(type: CardType) {
+    val label = when (type) {
+        CardType.KANJI_MEANING -> "Meaning"
+        CardType.KANJI_READING -> "Reading"
+        CardType.KANJI_WRITE -> "Writing"
+        CardType.VOCAB_READING -> "Vocab"
+        else -> return
+    }
+    Box(
+        modifier = Modifier
+            .background(Color(0xFFEDE8E2), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF6B5245),
+            fontWeight = FontWeight.Medium
         )
     }
 }

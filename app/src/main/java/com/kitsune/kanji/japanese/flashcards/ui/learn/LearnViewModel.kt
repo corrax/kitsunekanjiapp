@@ -65,7 +65,7 @@ class LearnViewModel(
             _uiState.update {
                 it.copy(selectedThemeId = savedTheme, selectedTrackId = savedTrackId)
             }
-            loadHome()
+            // loadHome() is triggered when Learn screen is composed (see KitsuneRoot) so profile stays in sync with Profile tab
         }
     }
 

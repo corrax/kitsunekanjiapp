@@ -13,15 +13,50 @@ const {
 
 const MODEL_NAME = 'gemini-2.5-flash';
 const PROMPT = [
-  'You are a Japanese language tutor.',
-  'Extract all Japanese vocabulary terms visible in this image.',
-  'Return strict JSON only with this shape:',
-  '{"terms":[{"kanji":"...","reading":"...","meaning":"...","notes":"..."}]}',
-  'No markdown fences. No prose. No explanations.',
-  'Max 15 terms.',
-  'Skip full sentences and focus on individual words or short phrases.',
-  'If nothing useful is found, return {"terms":[]}.'
+  'You are a Japanese language tutor analyzing an image for vocabulary learning.',
+  'Identify up to 30 Japanese vocabulary items from this image.',
+  'Include ALL of the following that apply:',
+  '1. Text visible in the image (signs, labels, menus, packaging, etc.)',
+  '2. Actions being performed by people in the image (verbs, e.g. 歩く for walking, 食べる for eating)',
+  '3. Objects and concepts depicted',
+  'For each item provide:',
+  'kanji: the Japanese word or phrase (kanji/kana as natural Japanese),',
+  'reading: hiragana or katakana reading,',
+  'meaning: a single English word or short compound noun (e.g. "walk", "red", "station", "exit sign"). Must be concise — one or two words maximum. Do NOT include explanations, parentheses, or phrases here.',
+  'definition: a brief English definition or extra context only when the single-word meaning is ambiguous or insufficient (e.g. "to walk slowly and casually" for 散歩). Leave blank or omit if the meaning field is self-explanatory.',
+  'jlptLevel: one of N5/N4/N3/N2/N1/unknown based on JLPT classification,',
+  'partOfSpeech: one of noun/verb/adjective/phrase/counter/other,',
+  'exampleSentence: a short natural Japanese sentence (max 15 words) using the word,',
+  'exampleTranslation: English translation of the example sentence,',
+  'confidence: 0.0–1.0 (1.0 = text directly visible in image; 0.7 = clearly depicted object/action; 0.4 = inferred from context).',
+  'Assign higher confidence to words directly visible as text.',
+  'Focus on words most useful for a learner.'
 ].join(' ');
+
+const RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    terms: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          kanji: { type: 'string' },
+          reading: { type: 'string' },
+          meaning: { type: 'string' },
+          definition: { type: 'string' },
+          jlptLevel: { type: 'string', enum: ['N5', 'N4', 'N3', 'N2', 'N1', 'unknown'] },
+          partOfSpeech: { type: 'string', enum: ['noun', 'verb', 'adjective', 'phrase', 'counter', 'other'] },
+          exampleSentence: { type: 'string' },
+          exampleTranslation: { type: 'string' },
+          confidence: { type: 'number' }
+        },
+        required: ['kanji', 'reading', 'meaning', 'definition', 'jlptLevel', 'partOfSpeech', 'exampleSentence', 'exampleTranslation', 'confidence']
+      }
+    }
+  },
+  required: ['terms']
+};
 
 const DEVICE_ID_HEADER = 'x-device-id';
 const DEVICE_ID_REGEX = /^[A-Za-z0-9._:-]{8,128}$/;
@@ -63,39 +98,37 @@ function noStoreError(statusCode, body, retryAfterSeconds) {
   return response;
 }
 
-function extractJsonBlock(text) {
-  const trimmed = text.trim();
-
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return trimmed;
-  }
-
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (fenced && fenced[1]) {
-    return fenced[1].trim();
-  }
-
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1);
-  }
-
-  throw new Error('Model did not return JSON.');
+function lowercaseFirst(str) {
+  if (!str) return str;
+  return str.charAt(0).toLowerCase() + str.slice(1);
 }
 
 function normalizeTerms(payload) {
+  const validLevels = new Set(['N5', 'N4', 'N3', 'N2', 'N1', 'unknown']);
+  const validPos = new Set(['noun', 'verb', 'adjective', 'phrase', 'counter', 'other']);
   const terms = Array.isArray(payload?.terms) ? payload.terms : [];
 
   return {
     terms: terms
-      .map((term) => ({
-        kanji: typeof term?.kanji === 'string' ? term.kanji.trim() : '',
-        reading: typeof term?.reading === 'string' ? term.reading.trim() : '',
-        meaning: typeof term?.meaning === 'string' ? term.meaning.trim() : '',
-        notes: typeof term?.notes === 'string' ? term.notes.trim() : ''
-      }))
+      .map((term) => {
+        const rawLevel = typeof term?.jlptLevel === 'string' ? term.jlptLevel.trim().toUpperCase() : '';
+        const rawPos = typeof term?.partOfSpeech === 'string' ? term.partOfSpeech.trim().toLowerCase() : '';
+        const confidence = typeof term?.confidence === 'number' ? Math.max(0, Math.min(1, term.confidence)) : 0.5;
+        const rawMeaning = typeof term?.meaning === 'string' ? term.meaning.trim() : '';
+        return {
+          kanji: typeof term?.kanji === 'string' ? term.kanji.trim() : '',
+          reading: typeof term?.reading === 'string' ? term.reading.trim() : '',
+          meaning: lowercaseFirst(rawMeaning),
+          definition: typeof term?.definition === 'string' ? term.definition.trim() : '',
+          jlptLevel: validLevels.has(rawLevel) ? rawLevel : 'unknown',
+          partOfSpeech: validPos.has(rawPos) ? rawPos : 'other',
+          exampleSentence: typeof term?.exampleSentence === 'string' ? term.exampleSentence.trim() : '',
+          exampleTranslation: typeof term?.exampleTranslation === 'string' ? term.exampleTranslation.trim() : '',
+          confidence
+        };
+      })
       .filter((term) => term.kanji.length > 0)
+      .sort((a, b) => b.confidence - a.confidence)
       .slice(0, 15)
   };
 }
@@ -402,30 +435,73 @@ exports.handler = async (event) => {
         : 'image/jpeg';
 
     const client = new GoogleGenAI({ apiKey });
-    const result = await client.models.generateContent({
+    console.info('Gemini request', {
       model: MODEL_NAME,
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            { text: PROMPT },
-            {
-              inlineData: {
-                data: image,
-                mimeType: resolvedMimeType
-              }
-            }
-          ]
-        }
-      ],
-      config: {
-        responseMimeType: 'application/json',
-        temperature: 0.1
-      }
+      mimeType: resolvedMimeType,
+      imageLength: image.length
     });
 
-    const text = result.text;
-    const parsed = JSON.parse(extractJsonBlock(text));
+    let result;
+    try {
+      result = await client.models.generateContent({
+        model: MODEL_NAME,
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: PROMPT },
+              {
+                inlineData: {
+                  data: image,
+                  mimeType: resolvedMimeType
+                }
+              }
+            ]
+          }
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: RESPONSE_SCHEMA,
+          temperature: 0.1
+        }
+      });
+    } catch (geminiError) {
+      console.error('Gemini API call failed', {
+        message: geminiError?.message,
+        name: geminiError?.name,
+        status: geminiError?.status,
+        statusCode: geminiError?.statusCode,
+        code: geminiError?.code,
+        cause: geminiError?.cause ? String(geminiError.cause) : undefined,
+        stack: geminiError?.stack
+      });
+      throw geminiError;
+    }
+
+    const rawText = result?.text;
+    if (rawText == null || typeof rawText !== 'string') {
+      console.error('Gemini response missing or invalid text', {
+        hasResult: !!result,
+        resultKeys: result ? Object.keys(result) : [],
+        rawResult: JSON.stringify(result)?.slice(0, 500)
+      });
+      throw new Error('Invalid response from analysis service.');
+    }
+
+    console.info('Gemini response received', { responseLength: rawText.length });
+
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch (parseError) {
+      console.error('Gemini response JSON parse failed', {
+        message: parseError?.message,
+        rawTextLength: rawText.length,
+        rawTextPreview: rawText.slice(0, 300)
+      });
+      throw new Error('Analysis service returned invalid data.');
+    }
+
     return jsonResponse(200, normalizeTerms(parsed));
   } catch (error) {
     const message =
@@ -439,7 +515,14 @@ exports.handler = async (event) => {
         : 500;
 
     if (statusCode >= 500) {
-      console.error('analyze-japanese failed', error);
+      console.error('analyze-japanese failed', {
+        message: error?.message,
+        name: error?.name,
+        stack: error?.stack,
+        status: error?.status,
+        statusCode: error?.statusCode,
+        code: error?.code
+      });
     }
 
     return jsonResponse(statusCode, { error: message });

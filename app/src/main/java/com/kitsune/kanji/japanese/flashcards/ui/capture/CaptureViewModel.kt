@@ -47,8 +47,12 @@ private data class BackendTerm(
     val kanji: String,
     val reading: String = "",
     val meaning: String = "",
-    val notes: String = "",
-    val jlptLevel: String = "unknown"
+    val definition: String = "",
+    val jlptLevel: String = "unknown",
+    val partOfSpeech: String = "other",
+    val exampleSentence: String = "",
+    val exampleTranslation: String = "",
+    val confidence: Float = 0.5f
 )
 
 @Serializable
@@ -60,7 +64,11 @@ data class RecognizedTerm(
     val text: String,
     val reading: String,
     val meaning: String,
+    val definition: String = "",
     val jlptLevel: String = "unknown",
+    val partOfSpeech: String = "other",
+    val exampleSentence: String = "",
+    val exampleTranslation: String = "",
     val confidence: Float,
     val selected: Boolean = true
 )
@@ -70,7 +78,9 @@ data class CaptureHistoryItem(
     val kanji: String,
     val kana: String,
     val meaning: String,
+    val definition: String = "",
     val jlptLevel: String,
+    val cardType: CardType,
     val includeInDaily: Boolean
 )
 
@@ -145,14 +155,6 @@ class CaptureViewModel(
                     return@launch
                 }
 
-                // Count against free-tier quota only when not Plus (Plus = unlimited)
-                val newCount = if (_uiState.value.isPlusEntitled) {
-                    _uiState.value.capturesUsedThisWeek
-                } else {
-                    captureQuotaPreferences.incrementWeeklyUsed()
-                }
-                _uiState.update { it.copy(capturesUsedThisWeek = newCount) }
-
                 val mediaId = UUID.randomUUID().toString()
                 lastMediaId = mediaId
                 val file = File(cacheDir, "capture_$mediaId.jpg")
@@ -170,8 +172,15 @@ class CaptureViewModel(
                         status = CaptureStatus.RESOLVED
                     )
                 )
+
+                // Only count against free-tier quota after successful analysis and save; errors/empty never consume quota.
+                val newCount = if (_uiState.value.isPlusEntitled) {
+                    _uiState.value.capturesUsedThisWeek
+                } else {
+                    captureQuotaPreferences.incrementWeeklyUsed()
+                }
                 _uiState.update {
-                    it.copy(phase = CapturePhase.REVIEW, recognizedTerms = terms, isProcessing = false)
+                    it.copy(phase = CapturePhase.REVIEW, recognizedTerms = terms, isProcessing = false, capturesUsedThisWeek = newCount)
                 }
             } catch (e: Exception) {
                 val msg = friendlyErrorMessageFor(e)
@@ -214,8 +223,9 @@ class CaptureViewModel(
                 connection.setRequestProperty("x-purchase-token", token)
             }
             connection.doOutput = true
-            connection.connectTimeout = 30_000
-            connection.readTimeout = 30_000
+            // Gemini can take 30+ seconds; use long timeouts so the client doesn't give up before the backend responds.
+            connection.connectTimeout = 60_000
+            connection.readTimeout = 90_000
 
             connection.outputStream.use { os ->
                 os.write(requestJson.toByteArray(Charsets.UTF_8))
@@ -233,8 +243,12 @@ class CaptureViewModel(
                     text = term.kanji,
                     reading = term.reading,
                     meaning = term.meaning.ifBlank { "—" },
+                    definition = term.definition,
                     jlptLevel = term.jlptLevel.ifBlank { "unknown" },
-                    confidence = 1.0f,
+                    partOfSpeech = term.partOfSpeech.ifBlank { "other" },
+                    exampleSentence = term.exampleSentence,
+                    exampleTranslation = term.exampleTranslation,
+                    confidence = term.confidence,
                     selected = true
                 )
             }
@@ -254,6 +268,8 @@ class CaptureViewModel(
         return when {
             code == HttpURLConnection.HTTP_BAD_REQUEST && normalized.contains("INVALID_ARGUMENT") ->
                 "Could not read this image clearly. Point at Japanese text or labeled objects and try again."
+            code == 504 ->
+                "Analysis took too long. Please try again."
             code == HttpURLConnection.HTTP_UNAVAILABLE ->
                 "Capture service is temporarily unavailable. Please try again."
             code == 402 ->
@@ -288,45 +304,47 @@ class CaptureViewModel(
                     kanji = term.text,
                     kana = term.reading,
                     meaning = term.meaning,
+                    definition = term.definition,
                     cropRect = null,
                     confidence = term.confidence,
                     source = "llm",
-                    jlptLevel = term.jlptLevel
+                    jlptLevel = term.jlptLevel,
+                    partOfSpeech = term.partOfSpeech,
+                    exampleSentence = term.exampleSentence,
+                    exampleTranslation = term.exampleTranslation
                 )
             }
             repository.saveCapturedTerms(terms)
 
-            var saved = 0
+            val allMeanings = selected.map { it.meaning }
+
             for ((i, term) in terms.withIndex()) {
                 val s = selected[i]
-                val cardId = "cap_${term.termId}"
-                val choices = generateDistractors(s.meaning, selected.map { it.meaning })
+
+                // One card per term: KANJI_MEANING — show kanji, pick English meaning
+                val meaningId = "cap_m_${term.termId}"
+                val normalizedMeaning = s.meaning.replaceFirstChar { it.lowercase() }
+                val meaningChoices = generateMeaningDistractors(normalizedMeaning, allMeanings)
                 repository.saveCard(
                     CardEntity(
-                        cardId = cardId,
+                        cardId = meaningId,
                         type = CardType.KANJI_MEANING,
                         prompt = s.text,
-                        canonicalAnswer = s.meaning,
-                        acceptedAnswersRaw = s.meaning,
+                        canonicalAnswer = normalizedMeaning,
+                        acceptedAnswersRaw = normalizedMeaning,
                         reading = s.reading,
-                        meaning = s.meaning,
+                        meaning = normalizedMeaning,
                         promptFurigana = null,
-                        choicesRaw = choices.joinToString("|"),
+                        choicesRaw = meaningChoices.joinToString("|"),
                         difficulty = 3,
-                        templateId = "tmpl_$cardId"
+                        templateId = "tmpl_$meaningId"
                     )
                 )
                 repository.saveCapturedCard(
-                    CapturedCardEntity(
-                        cardId = cardId,
-                        termId = term.termId,
-                        createdAtEpochMillis = now,
-                        includeInDaily = true
-                    )
+                    CapturedCardEntity(cardId = meaningId, termId = term.termId, createdAtEpochMillis = now, includeInDaily = true)
                 )
-                saved++
             }
-            _uiState.update { it.copy(phase = CapturePhase.SAVED, savedCount = saved) }
+            _uiState.update { it.copy(phase = CapturePhase.SAVED, savedCount = terms.size) }
         }
     }
 
@@ -348,7 +366,9 @@ class CaptureViewModel(
                             kanji = row.kanji,
                             kana = row.kana ?: "",
                             meaning = row.meaning ?: "—",
+                            definition = row.definition,
                             jlptLevel = row.jlptLevel,
+                            cardType = row.cardType,
                             includeInDaily = row.includeInDaily
                         )
                     }
@@ -381,13 +401,19 @@ class CaptureViewModel(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private fun generateDistractors(correct: String, allMeanings: List<String>): List<String> {
+    private fun generateMeaningDistractors(correct: String, allMeanings: List<String>): List<String> {
         val pool = listOf(
             "sugar-free", "half price", "new product", "spicy", "exit",
             "entrance", "push", "pull", "receipt", "address",
             "station", "express", "transfer", "prohibited", "caution"
         )
-        val others = (allMeanings + pool).filter { it != correct }.distinct().shuffled().take(3)
+        // correct is already lowercased-first by the caller; pool is already lowercase
+        val normalizedMeanings = allMeanings.map { it.replaceFirstChar { c -> c.lowercase() } }
+        val others = (normalizedMeanings + pool)
+            .filter { it != correct }
+            .distinct()
+            .shuffled()
+            .take(3)
         return (others + correct).shuffled()
     }
 

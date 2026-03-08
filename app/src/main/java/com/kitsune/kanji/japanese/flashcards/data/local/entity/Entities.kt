@@ -179,10 +179,14 @@ data class CapturedTermEntity(
     val kanji: String,
     val kana: String,
     val meaning: String,
+    val definition: String = "",
     val cropRect: String?,
     val confidence: Float,
     val source: String,
-    val jlptLevel: String = "unknown"
+    val jlptLevel: String = "unknown",
+    val partOfSpeech: String = "other",
+    val exampleSentence: String = "",
+    val exampleTranslation: String = ""
 )
 
 @Entity(tableName = "captured_cards")

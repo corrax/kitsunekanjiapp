@@ -156,6 +156,10 @@ fun DeckScreen(
             null
         }
     }
+    val isBeginnerTrack = remember(state.session?.sourceId) {
+        val sourceId = state.session?.sourceId.orEmpty()
+        sourceId.contains("n5") || sourceId.contains("foundations")
+    }
     val isChoiceCard = currentCard?.choices?.isNotEmpty() == true &&
         currentCard.type in setOf(
             CardType.KANJI_MEANING,
@@ -446,7 +450,7 @@ fun DeckScreen(
                             ) {
                                 val promptFurigana = currentCard.promptFurigana
                                 val shouldRenderFurigana = promptFurigana != null &&
-                                    shouldShowFurigana(cardDifficulty = currentCard.difficulty)
+                                    shouldShowFurigana(cardDifficulty = currentCard.difficulty, isBeginnerTrack = isBeginnerTrack)
                                 val plainJapanesePrompt = promptFurigana?.let(::stripFuriganaMarkup)
                                 if (currentCard.type == CardType.KANJI_MEANING) {
                                     // Show reading above, then kanji prominently below
@@ -1868,8 +1872,8 @@ private fun Modifier.partialKanjiReveal(mode: KanjiHintRevealMode): Modifier {
     }
 }
 
-private fun shouldShowFurigana(cardDifficulty: Int): Boolean {
-    return cardDifficulty <= 4
+private fun shouldShowFurigana(cardDifficulty: Int, isBeginnerTrack: Boolean = false): Boolean {
+    return isBeginnerTrack || cardDifficulty <= 4
 }
 
 private fun stripFuriganaMarkup(text: String): String {
@@ -2094,11 +2098,22 @@ private fun FuriganaText(
     ) {
         tokens.forEach { token ->
             when (token) {
-                is FuriganaToken.Plain -> Text(
-                    text = token.value,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+                is FuriganaToken.Plain -> Column(
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Invisible placeholder matching reading-label height so the kanji
+                    // baselines align between Plain and Ruby tokens in the FlowRow.
+                    Text(
+                        text = "\u00A0",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Transparent
+                    )
+                    Text(
+                        text = token.value,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
                 is FuriganaToken.Ruby -> Column(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
