@@ -136,7 +136,7 @@ fun PaywallScreen(
             item {
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     Text(
-                        text = "Snap It.\nLearn It.\nRemember It.",
+                        text = "Learn From\nYour World",
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         color = TextDark,
@@ -144,7 +144,7 @@ fun PaywallScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Point your camera at any Japanese text and Kitsune builds your next flashcard session automatically.",
+                        text = "Free users get 3 camera captures a week. Plus removes the limit so you can turn anything you see into practice.",
                         style = MaterialTheme.typography.bodyLarge,
                         color = TextMuted
                     )
@@ -160,37 +160,13 @@ fun PaywallScreen(
                     modifier = Modifier.padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    BenefitBullet("Unlimited camera captures — snap menus, signs, manga, and more.")
-                    BenefitBullet("Every capture auto-creates flashcards for your next daily session.")
-                    BenefitBullet("All topic tracks: JLPT, conversation, school, and work.")
+                    BenefitBullet("Snap menus, signs, manga, textbooks — no weekly limit.")
+                    BenefitBullet("Every word you capture is queued into your next daily deck automatically.")
+                    BenefitBullet("Build vocabulary from your real life, not just preset lists.")
                 }
             }
             item {
                 Spacer(Modifier.height(10.dp))
-            }
-
-            // ── Social proof ──────────────────────────────────────────────
-            item {
-                Row(
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    repeat(3) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = null,
-                            tint = Color(0xFFFFB300),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        text = "Make progress on your Japanese today!",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextMuted
-                    )
-                }
             }
 
             // ── Inline paywall (plan selector, card, CTA, restore, skip) ───

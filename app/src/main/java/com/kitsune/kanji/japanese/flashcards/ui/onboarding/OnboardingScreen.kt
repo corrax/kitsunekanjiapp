@@ -776,20 +776,20 @@ private fun PlansSlide(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Snap It. Learn It. Remember It.",
+                text = "Learn From Your World",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF2D1E14)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = "Point your camera at any Japanese text and Kitsune turns it into a flashcard queued straight into your daily deck.",
+                text = "Free users get 3 camera captures per week. Plus removes the limit so you can turn anything you see into practice.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color(0xFF7A6355)
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Feature comparison card
+            // Plus benefits card
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFEFBF7)),
                 shape = RoundedCornerShape(16.dp),
@@ -800,28 +800,11 @@ private fun PlansSlide(
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    PlanFeatureRow(
-                        feature = "Camera capture → daily deck cards",
-                        freeValue = "3 / week",
-                        plusValue = "Unlimited"
-                    )
-                    PlanFeatureRow(
-                        feature = "Daily quiz decks",
-                        freeValue = "\u2713",
-                        plusValue = "\u2713"
-                    )
-                    PlanFeatureRow(
-                        feature = "All topic tracks",
-                        freeValue = "\u2713",
-                        plusValue = "\u2713"
-                    )
-                    PlanFeatureRow(
-                        feature = "Progress analytics",
-                        freeValue = "\u2713",
-                        plusValue = "\u2713"
-                    )
+                    ValueBullet("Snap menus, signs, manga, textbooks — no weekly limit.")
+                    ValueBullet("Every word you capture is queued into your next daily deck automatically.")
+                    ValueBullet("Build vocabulary from your real life, not just preset lists.")
                 }
             }
 
@@ -851,36 +834,6 @@ private fun PlansSlide(
                 tint = Color(0xFF2D1E14)
             )
         }
-    }
-}
-
-@Composable
-private fun PlanFeatureRow(feature: String, freeValue: String, plusValue: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = feature,
-            style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF4D392D),
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = freeValue,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF7A6355),
-            modifier = Modifier.width(60.dp),
-            textAlign = TextAlign.Center
-        )
-        Text(
-            text = plusValue,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFFFF5A00),
-            modifier = Modifier.width(72.dp),
-            textAlign = TextAlign.Center
-        )
     }
 }
 

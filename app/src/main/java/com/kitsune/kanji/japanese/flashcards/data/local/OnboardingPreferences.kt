@@ -81,6 +81,18 @@ class OnboardingPreferences(private val context: Context) {
         }
     }
 
+    suspend fun shouldShowFirstCapturePrompt(): Boolean {
+        return context.userPrefsDataStore.data
+            .map { prefs -> !(prefs[KEY_FIRST_CAPTURE_PROMPT_DISMISSED] ?: false) }
+            .first()
+    }
+
+    suspend fun setFirstCapturePromptDismissed() {
+        context.userPrefsDataStore.edit { prefs ->
+            prefs[KEY_FIRST_CAPTURE_PROMPT_DISMISSED] = true
+        }
+    }
+
     suspend fun shouldShowDeckHowToPlay(): Boolean {
         return context.userPrefsDataStore.data
             .map { prefs -> !(prefs[KEY_DECK_HOW_TO_PLAY_DISMISSED] ?: false) }
@@ -98,6 +110,7 @@ class OnboardingPreferences(private val context: Context) {
         private val KEY_LEARNER_LEVEL = stringPreferencesKey("learner_level")
         private val KEY_EDUCATIONAL_GOAL = stringPreferencesKey("educational_goal")
         private val KEY_PLACEMENT_APPLIED = booleanPreferencesKey("placement_applied")
+        private val KEY_FIRST_CAPTURE_PROMPT_DISMISSED = booleanPreferencesKey("first_capture_prompt_dismissed")
         private val KEY_DECK_HOW_TO_PLAY_DISMISSED = booleanPreferencesKey("deck_how_to_play_dismissed")
     }
 }

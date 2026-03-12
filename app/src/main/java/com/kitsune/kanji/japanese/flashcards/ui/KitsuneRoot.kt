@@ -261,7 +261,8 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                             repository = appContainer.repository,
                             deckSelectionPreferences = appContainer.deckSelectionPreferences,
                             billingPreferences = appContainer.billingPreferences,
-                            captureQuotaPreferences = appContainer.captureQuotaPreferences
+                            captureQuotaPreferences = appContainer.captureQuotaPreferences,
+                            onboardingPreferences = appContainer.onboardingPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -307,7 +308,16 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                                 navController.navigate(routeCapture)
                             }
                         },
-                        onOpenCaptureHistory = { navController.navigate(routeCaptureHistory) }
+                        onOpenCaptureHistory = { navController.navigate(routeCaptureHistory) },
+                        onDismissFirstCapturePrompt = viewModel::dismissFirstCapturePrompt,
+                        onFirstCaptureTryIt = {
+                            viewModel.dismissFirstCapturePrompt()
+                            if (state.captureNeedsUpgrade) {
+                                navController.navigate("$routePaywall?trial=false&fromOnboarding=false")
+                            } else {
+                                navController.navigate(routeCapture)
+                            }
+                        }
                     )
                 }
 

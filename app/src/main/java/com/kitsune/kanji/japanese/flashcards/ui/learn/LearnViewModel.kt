@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.OnboardingPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
@@ -46,14 +47,18 @@ data class LearnHubUiState(
     val selectedTrackId: String = "jlpt_n5_core",
     val errorMessage: String? = null,
     /** True when free capture quota is exceeded; open paywall instead of capture when user taps capture. */
-    val captureNeedsUpgrade: Boolean = false
+    val captureNeedsUpgrade: Boolean = false,
+    val showFirstCapturePrompt: Boolean = false,
+    /** Number of captured words queued for the next daily deck. */
+    val pendingCapturedCount: Int = 0
 )
 
 class LearnViewModel(
     private val repository: KitsuneRepository,
     private val deckSelectionPreferences: DeckSelectionPreferences,
     private val billingPreferences: BillingPreferences,
-    private val captureQuotaPreferences: CaptureQuotaPreferences
+    private val captureQuotaPreferences: CaptureQuotaPreferences,
+    private val onboardingPreferences: OnboardingPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LearnHubUiState())
@@ -71,6 +76,11 @@ class LearnViewModel(
                 it.copy(selectedThemeId = savedTheme, selectedTrackId = savedTrackId)
             }
             // loadHome() is triggered when Learn screen is composed (see KitsuneRoot) so profile stays in sync with Profile tab
+        }
+        viewModelScope.launch {
+            if (onboardingPreferences.shouldShowFirstCapturePrompt()) {
+                _uiState.update { it.copy(showFirstCapturePrompt = true) }
+            }
         }
         viewModelScope.launch {
             combine(
@@ -137,6 +147,13 @@ class LearnViewModel(
         }
     }
 
+    fun dismissFirstCapturePrompt() {
+        _uiState.update { it.copy(showFirstCapturePrompt = false) }
+        viewModelScope.launch {
+            onboardingPreferences.setFirstCapturePromptDismissed()
+        }
+    }
+
     fun refreshHome() {
         loadHome()
     }
@@ -167,6 +184,11 @@ class LearnViewModel(
                     )
                 }
             }
+            // Load pending captured word count
+            runCatching { repository.getDailyCapturedCards() }
+                .onSuccess { cards ->
+                    _uiState.update { it.copy(pendingCapturedCount = cards.size) }
+                }
         }
     }
 
@@ -196,14 +218,16 @@ class LearnViewModel(
             repository: KitsuneRepository,
             deckSelectionPreferences: DeckSelectionPreferences,
             billingPreferences: BillingPreferences,
-            captureQuotaPreferences: CaptureQuotaPreferences
+            captureQuotaPreferences: CaptureQuotaPreferences,
+            onboardingPreferences: OnboardingPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 LearnViewModel(
                     repository = repository,
                     deckSelectionPreferences = deckSelectionPreferences,
                     billingPreferences = billingPreferences,
-                    captureQuotaPreferences = captureQuotaPreferences
+                    captureQuotaPreferences = captureQuotaPreferences,
+                    onboardingPreferences = onboardingPreferences
                 )
             }
         }

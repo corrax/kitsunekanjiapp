@@ -57,7 +57,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.kitsune.kanji.japanese.flashcards.R
 import com.kitsune.kanji.japanese.flashcards.data.local.entity.PackProgressStatus
 import com.kitsune.kanji.japanese.flashcards.domain.model.PackProgress
@@ -81,7 +83,9 @@ fun LearnScreen(
     onRefresh: () -> Unit,
     onProfileClick: () -> Unit = {},
     onOpenCapture: () -> Unit = {},
-    onOpenCaptureHistory: () -> Unit = {}
+    onOpenCaptureHistory: () -> Unit = {},
+    onDismissFirstCapturePrompt: () -> Unit = {},
+    onFirstCaptureTryIt: () -> Unit = {}
 ) {
     val themes = state.availableThemes
 
@@ -124,6 +128,16 @@ fun LearnScreen(
                     onClick = onProfileClick,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                 )
+            }
+
+            // ── Next Step nudge for brand-new users ──
+            if (!state.hasStartedDailyChallenge && state.rankSummary.wordsCovered == 0) {
+                item {
+                    NextStepNudge(
+                        pendingCapturedCount = state.pendingCapturedCount,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
             }
 
             // ── Daily Challenge Card ──
@@ -290,6 +304,14 @@ fun LearnScreen(
                     color = Color.White
                 )
             }
+        }
+
+        // First-capture prompt dialog
+        if (state.showFirstCapturePrompt) {
+            FirstCapturePromptDialog(
+                onTryIt = onFirstCaptureTryIt,
+                onDismiss = onDismissFirstCapturePrompt
+            )
         }
     }
 }
@@ -481,8 +503,13 @@ private fun DailyChallengeFeaturedCard(
                             trackColor = Color.White.copy(alpha = 0.3f)
                         )
                     } else if (!isStarted) {
+                        val subtitle = if (state.pendingCapturedCount > 0) {
+                            "${state.pendingCapturedCount} captured word${if (state.pendingCapturedCount != 1) "s" else ""} queued + new cards at your level"
+                        } else {
+                            "New and existing words and kanji — all matched to your level"
+                        }
                         Text(
-                            text = "Adaptive cards based on your level",
+                            text = subtitle,
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.85f)
                         )
@@ -790,6 +817,125 @@ private fun PackPlaceholderRow(levelName: String, accent: Color) {
             .height(0.5.dp)
             .background(BorderLight)
     )
+}
+
+@Composable
+private fun FirstCapturePromptDialog(
+    onTryIt: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEFBF7)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(Color(0x30FF5A00), Color.Transparent)
+                            ),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Filled.CameraAlt,
+                        contentDescription = null,
+                        tint = AccentOrange,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+                Text(
+                    text = "Try Your First Snap",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = TextDark,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    text = "Point your camera at any Japanese text and Kitsune turns it into flashcards for your next session.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center
+                )
+                Button(
+                    onClick = onTryIt,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AccentOrange,
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(
+                        Icons.Filled.CameraAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Open Camera", fontWeight = FontWeight.SemiBold)
+                }
+                Text(
+                    text = "Maybe later",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextMuted,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .clickable(onClick = onDismiss)
+                        .padding(vertical = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NextStepNudge(
+    pendingCapturedCount: Int,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E8)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Star,
+                contentDescription = null,
+                tint = AccentOrange,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = if (pendingCapturedCount > 0) {
+                    "Start your Daily Challenge to practice your $pendingCapturedCount captured word${if (pendingCapturedCount != 1) "s" else ""}"
+                } else {
+                    "Start your first Daily Challenge — it takes about 5 minutes"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                color = TextDark,
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
 }
 
 private fun heroTermsFor(themeId: String): String? = when (themeId) {
