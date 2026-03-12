@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kitsune.kanji.japanese.flashcards.data.local.BillingPreferences
+import com.kitsune.kanji.japanese.flashcards.data.local.CaptureQuotaPreferences
 import com.kitsune.kanji.japanese.flashcards.data.local.DeckSelectionPreferences
 import com.kitsune.kanji.japanese.flashcards.data.repository.KitsuneRepository
 import com.kitsune.kanji.japanese.flashcards.domain.model.ActiveDeckRunProgress
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -42,13 +44,16 @@ data class LearnHubUiState(
     val availableThemes: List<DeckThemeOption> = deckThemeCatalog,
     val selectedThemeId: String = deckThemeCatalog.firstOrNull()?.id ?: "jlpt_n5",
     val selectedTrackId: String = "jlpt_n5_core",
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /** True when free capture quota is exceeded; open paywall instead of capture when user taps capture. */
+    val captureNeedsUpgrade: Boolean = false
 )
 
 class LearnViewModel(
     private val repository: KitsuneRepository,
     private val deckSelectionPreferences: DeckSelectionPreferences,
-    private val billingPreferences: BillingPreferences
+    private val billingPreferences: BillingPreferences,
+    private val captureQuotaPreferences: CaptureQuotaPreferences
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LearnHubUiState())
@@ -66,6 +71,16 @@ class LearnViewModel(
                 it.copy(selectedThemeId = savedTheme, selectedTrackId = savedTrackId)
             }
             // loadHome() is triggered when Learn screen is composed (see KitsuneRoot) so profile stays in sync with Profile tab
+        }
+        viewModelScope.launch {
+            combine(
+                billingPreferences.entitlementFlow,
+                captureQuotaPreferences.weeklyUsedFlow
+            ) { entitlement, used ->
+                !entitlement.isPlusEntitled && used >= CaptureQuotaPreferences.FREE_WEEKLY_LIMIT
+            }.collect { needsUpgrade ->
+                _uiState.update { it.copy(captureNeedsUpgrade = needsUpgrade) }
+            }
         }
     }
 
@@ -180,13 +195,15 @@ class LearnViewModel(
         fun factory(
             repository: KitsuneRepository,
             deckSelectionPreferences: DeckSelectionPreferences,
-            billingPreferences: BillingPreferences
+            billingPreferences: BillingPreferences,
+            captureQuotaPreferences: CaptureQuotaPreferences
         ): ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 LearnViewModel(
                     repository = repository,
                     deckSelectionPreferences = deckSelectionPreferences,
-                    billingPreferences = billingPreferences
+                    billingPreferences = billingPreferences,
+                    captureQuotaPreferences = captureQuotaPreferences
                 )
             }
         }

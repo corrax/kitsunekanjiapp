@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -33,12 +35,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.NotificationsActive
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.material.icons.outlined.AutoStories
+import androidx.compose.material.icons.outlined.Today
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -473,10 +474,10 @@ private fun IntroSlide(slide: OnboardingSlide, modifier: Modifier = Modifier) {
             if (slide.icon != null) {
                 Box(
                     modifier = Modifier
-                        .size(64.dp)
+                        .size(88.dp)
                         .background(
                             Brush.radialGradient(
-                                listOf(Color(0x22FF5A00), Color.Transparent)
+                                listOf(Color(0x30FF5A00), Color.Transparent)
                             ),
                             CircleShape
                         ),
@@ -486,7 +487,7 @@ private fun IntroSlide(slide: OnboardingSlide, modifier: Modifier = Modifier) {
                         imageVector = slide.icon,
                         contentDescription = null,
                         tint = Color(0xFFFF5A00),
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(52.dp)
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
@@ -500,12 +501,12 @@ private fun IntroSlide(slide: OnboardingSlide, modifier: Modifier = Modifier) {
                     .fillMaxWidth()
                     .border(1.dp, Color(0xFFFFCEAF), RoundedCornerShape(20.dp))
             ) {
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
                     // Left accent stripe
                     Box(
                         modifier = Modifier
                             .width(5.dp)
-                            .height(160.dp)
+                            .fillMaxHeight()
                             .background(
                                 Brush.verticalGradient(
                                     listOf(Color(0xFFFF5A00), Color(0xFFFF8C4E))
@@ -902,131 +903,36 @@ private fun summaryForSelection(goal: EducationalGoal, level: LearnerLevel): Str
 }
 
 private fun slidesForGoal(goal: EducationalGoal): List<OnboardingSlide> {
-    return when (goal) {
-        EducationalGoal.CASUAL -> listOf(
-            OnboardingSlide(
-                title = "Pick Up Japanese Naturally",
-                body = "Conversation-first decks focus on practical words and phrases you can use right away. No textbook order \u2014 just what matters most.",
-                watermark = "\u8A71",
-                icon = Icons.Outlined.AutoStories,
-                decoration = SlideDecoration.SAKURA
-            ),
-            OnboardingSlide(
-                title = "Daily Practice That Fits Your Pace",
-                body = "Short sessions train fast comprehension so everyday dialogue feels easier. Adaptive reranking keeps challenge high without burning you out.",
-                watermark = "\u65E5",
-                icon = Icons.Outlined.Schedule,
-                decoration = SlideDecoration.WAVES
-            ),
-            OnboardingSlide(
-                title = "Build Habits, Not Homework",
-                body = "Daily decks stay compact at 15-18 cards. Progress is automatic \u2014 Kitsune moves you forward as your scores improve.",
-                watermark = "\u529B",
-                icon = Icons.Outlined.TrendingUp,
-                decoration = SlideDecoration.TORII
-            ),
-            OnboardingSlide(
-                title = "Snap It, Learn It",
-                body = "Spotted something at a konbini or izakaya you can\u2019t read? Tap the camera icon, take a photo \u2014 Kitsune reads the Japanese for you and adds it to your learning plan. No dictionary detour.",
-                watermark = "\u64ae",
-                icon = Icons.Outlined.CameraAlt,
-                decoration = SlideDecoration.LANTERN
-            )
-        )
-
-        EducationalGoal.EVERYDAY_USE -> listOf(
-            OnboardingSlide(
-                title = "Japanese for Real Life",
-                body = "Core daily-life words are introduced first, then reinforced through realistic sentence use. From reading menus to catching trains.",
-                watermark = "\u751F",
-                icon = Icons.Outlined.AutoStories,
-                decoration = SlideDecoration.TORII
-            ),
-            OnboardingSlide(
-                title = "Handle Real Situations With Confidence",
-                body = "School, work, and conversation cards rotate based on your score to target practical gaps you actually need to fill.",
-                watermark = "\u8A71",
-                icon = Icons.Outlined.TrendingUp,
-                decoration = SlideDecoration.WAVES
-            ),
-            OnboardingSlide(
-                title = "Grammar That Sticks",
-                body = "Lower levels use guided choices, then graduate to cloze writing as you improve. Every pattern is linked to real examples.",
-                watermark = "\u6587",
-                icon = Icons.Outlined.Schedule,
-                decoration = SlideDecoration.SAKURA
-            ),
-            OnboardingSlide(
-                title = "Real Life Is Your Classroom",
-                body = "Point your camera at a menu, a package label, or a missed delivery slip. Kitsune extracts the vocabulary and queues it straight into your daily practice \u2014 no typing required.",
-                watermark = "\u8AAD",
-                icon = Icons.Outlined.CameraAlt,
-                decoration = SlideDecoration.LANTERN
-            )
-        )
-
-        EducationalGoal.SCHOOL_OR_WORK -> listOf(
-            OnboardingSlide(
-                title = "Level Up for School & Work",
-                body = "Focused tracks cover classroom, office, meetings, requests, and deadlines. Professional Japanese with practical drills.",
-                watermark = "\u5B66",
-                icon = Icons.Outlined.AutoStories,
-                decoration = SlideDecoration.WAVES
-            ),
-            OnboardingSlide(
-                title = "Professional Clarity, Faster",
-                body = "Polite forms and pattern drills are reinforced with context-based sentence cards. Practice what you'll actually say.",
-                watermark = "\u4ED5",
-                icon = Icons.Outlined.TrendingUp,
-                decoration = SlideDecoration.TORII
-            ),
-            OnboardingSlide(
-                title = "Track What Matters",
-                body = "Adaptive scoring surfaces weak points early so high-value terms get repeated sooner. Study smarter, not longer.",
-                watermark = "\u9032",
-                icon = Icons.Outlined.Schedule,
-                decoration = SlideDecoration.SAKURA
-            ),
-            OnboardingSlide(
-                title = "Capture What Comes Up",
-                body = "See an unfamiliar term in a document, sign, or presentation? Snap it with Kitsune\u2019s camera. It turns the text into a review card ready for your next session \u2014 so nothing useful slips by.",
-                watermark = "\u5199",
-                icon = Icons.Outlined.CameraAlt,
-                decoration = SlideDecoration.LANTERN
-            )
-        )
-
-        EducationalGoal.JLPT_OR_CLASSES -> listOf(
-            OnboardingSlide(
-                title = "Ace Your JLPT Goals",
-                body = "Progressive decks follow JLPT-aligned difficulty while still adapting to your true performance. Targeted practice across N5\u2013N2.",
-                watermark = "\u8A66",
-                icon = Icons.Outlined.AutoStories,
-                decoration = SlideDecoration.SAKURA
-            ),
-            OnboardingSlide(
-                title = "Sharpen Grammar & Reading",
-                body = "Pattern cards and sentence checks target mistakes that typically reduce test scores. Every card builds on shared examples.",
-                watermark = "\u8AAD",
-                icon = Icons.Outlined.TrendingUp,
-                decoration = SlideDecoration.TORII
-            ),
-            OnboardingSlide(
-                title = "Study Smarter, Not Longer",
-                body = "Shared sentence examples train vocab, grammar, and comprehension together \u2014 reducing overload and reinforcing connections.",
-                watermark = "\u7D50",
-                icon = Icons.Outlined.Schedule,
-                decoration = SlideDecoration.WAVES
-            ),
-            OnboardingSlide(
-                title = "Vocab in the Wild Counts Too",
-                body = "Spot a kanji in a study sheet, textbook, or sign you don\u2019t recognize? Snap it. Kitsune pulls out the term and adds it to your practice queue \u2014 JLPT prep meets real-world input.",
-                watermark = "\u529B",
-                icon = Icons.Outlined.CameraAlt,
-                decoration = SlideDecoration.LANTERN
-            )
-        )
+    val captureContext = when (goal) {
+        EducationalGoal.CASUAL -> "a konbini label or restaurant menu"
+        EducationalGoal.EVERYDAY_USE -> "a train sign, menu, or package label"
+        EducationalGoal.SCHOOL_OR_WORK -> "a document, sign, or presentation slide"
+        EducationalGoal.JLPT_OR_CLASSES -> "a textbook page, study sheet, or sign"
     }
+
+    return listOf(
+        OnboardingSlide(
+            title = "Swipe Through Smart Flashcards",
+            body = "Pick meanings, choose readings, and write kanji \u2014 each card type builds on the last as you level up.",
+            watermark = "\u8A71",
+            icon = Icons.Outlined.AutoStories,
+            decoration = SlideDecoration.SAKURA
+        ),
+        OnboardingSlide(
+            title = "Snap It, Learn It",
+            body = "Point your camera at $captureContext \u2014 Kitsune reads the Japanese and queues it as flashcards for your next session.",
+            watermark = "\u64ae",
+            icon = Icons.Outlined.CameraAlt,
+            decoration = SlideDecoration.LANTERN
+        ),
+        OnboardingSlide(
+            title = "A Fresh Deck Every Day",
+            body = "Your Daily Challenge mixes new words, captured vocab, and cards you need to review \u2014 all in about 15 cards.",
+            watermark = "\u65E5",
+            icon = Icons.Outlined.Today,
+            decoration = SlideDecoration.TORII
+        )
+    )
 }
 
 @Composable

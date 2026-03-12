@@ -260,7 +260,8 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         factory = LearnViewModel.factory(
                             repository = appContainer.repository,
                             deckSelectionPreferences = appContainer.deckSelectionPreferences,
-                            billingPreferences = appContainer.billingPreferences
+                            billingPreferences = appContainer.billingPreferences,
+                            captureQuotaPreferences = appContainer.captureQuotaPreferences
                         )
                     )
                     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -299,7 +300,13 @@ fun KitsuneRoot(deepLinkThemeId: String? = null) {
                         onThemeSelected = viewModel::onThemeSelected,
                         onRefresh = viewModel::refreshHome,
                         onProfileClick = { navController.navigate(routeProfile) },
-                        onOpenCapture = { navController.navigate(routeCapture) },
+                        onOpenCapture = {
+                            if (state.captureNeedsUpgrade) {
+                                navController.navigate("$routePaywall?trial=false&fromOnboarding=false")
+                            } else {
+                                navController.navigate(routeCapture)
+                            }
+                        },
                         onOpenCaptureHistory = { navController.navigate(routeCaptureHistory) }
                     )
                 }
